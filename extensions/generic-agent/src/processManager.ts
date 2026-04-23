@@ -16,7 +16,10 @@ export interface BackendPorts {
  * Bootstrap:
  *   1. Resolve python executable (setting → bundled python-embed → system python).
  *   2. Resolve agent-core path (setting → bundled copy → sibling of extension).
- *   3. Spawn `pythonw.exe agent-core/frontends/launch.pyw --http-port 0 --ws-port 0`.
+ *   3. Spawn `python.exe agent-core/frontends/webapp.py --http-port 0 --ws-port 0`
+ *      with `windowsHide: true` (no console window, but pipes still flow).
+ *      Note: launch.pyw is *not* used here — it wraps webapp.py in a pywebview
+ *      window which we don't want inside the IDE.
  *   4. Parse stdout for `[webapp] HTTP on http://127.0.0.1:<n>` and the matching WS line.
  *   5. Resolve `ready` promise with those ports.
  *
@@ -44,18 +47,18 @@ export class PythonProcessManager implements vscode.Disposable {
 		const cfg = vscode.workspace.getConfiguration('genericAgent');
 		const py = this.resolvePython(cfg.get<string>('pythonPath') || '');
 		const core = this.resolveAgentCore(cfg.get<string>('agentCorePath') || '');
-		const launchPy = path.join(core, 'frontends', 'launch.pyw');
+		const webappPy = path.join(core, 'frontends', 'webapp.py');
 
 		if (!fs.existsSync(py)) {
 			throw new Error(`Python interpreter not found: ${py}`);
 		}
-		if (!fs.existsSync(launchPy)) {
-			throw new Error(`launch.pyw not found: ${launchPy}`);
+		if (!fs.existsSync(webappPy)) {
+			throw new Error(`webapp.py not found: ${webappPy}`);
 		}
 
-		logger.info('spawning python backend', { py, launchPy });
+		logger.info('spawning python backend', { py, webappPy });
 
-		const child = cp.spawn(py, [launchPy, '--http-port', '0', '--ws-port', '0'], {
+		const child = cp.spawn(py, [webappPy, '--http-port', '0', '--ws-port', '0'], {
 			cwd: path.join(core, 'frontends'),
 			env: { ...process.env, GA_IDE_MODE: '1', PYTHONIOENCODING: 'utf-8' },
 			stdio: ['ignore', 'pipe', 'pipe'],
@@ -121,12 +124,15 @@ export class PythonProcessManager implements vscode.Disposable {
 
 	private resolvePython(override: string): string {
 		if (override && fs.existsSync(override)) { return override; }
-		// bundled python-embed lives at ../../python-embed/pythonw.exe relative to
+		// bundled python-embed lives at ../../python-embed/python.exe relative to
 		// the compiled extension (resources/app/python-embed/…).
-		const bundled = path.join(this.ctx.extensionPath, '..', '..', 'python-embed', 'pythonw.exe');
+		// We use python.exe (not pythonw.exe) so that the child's stdout pipe is
+		// reliable for port parsing; the console window is suppressed via
+		// `windowsHide: true` in spawn options.
+		const bundled = path.join(this.ctx.extensionPath, '..', '..', 'python-embed', 'python.exe');
 		if (fs.existsSync(bundled)) { return bundled; }
 		// Dev fallback: system python
-		return process.platform === 'win32' ? 'pythonw.exe' : 'python3';
+		return process.platform === 'win32' ? 'python.exe' : 'python3';
 	}
 
 	private resolveAgentCore(override: string): string {
