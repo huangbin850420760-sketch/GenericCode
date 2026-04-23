@@ -1,0 +1,3 @@
+[submodule "agent-core"]
+	path = agent-core
+	url = https://github.com/huangbin850420760-sketch/GenericAgent.git
