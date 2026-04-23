@@ -1,0 +1,92 @@
+{
+  "name": "generic-agent",
+  "publisher": "vscode",
+  "displayName": "GenericAgent",
+  "description": "Agentic chat panel backed by the GenericAgent Python core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension",
+  "activationEvents": [
+    "onView:genericAgent.chat",
+    "onCommand:genericAgent.showChat"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "genericAgent",
+          "title": "GenericAgent",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "genericAgent": [
+        {
+          "type": "webview",
+          "id": "genericAgent.chat",
+          "name": "Chat",
+          "icon": "media/icon.svg",
+          "contextualTitle": "GenericAgent"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "genericAgent.showChat",
+        "title": "GenericAgent: Focus Chat"
+      },
+      {
+        "command": "genericAgent.restartBackend",
+        "title": "GenericAgent: Restart Backend"
+      },
+      {
+        "command": "genericAgent.showLogs",
+        "title": "GenericAgent: Show Logs"
+      }
+    ],
+    "configuration": {
+      "title": "GenericAgent",
+      "properties": {
+        "genericAgent.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Python interpreter. Empty = use bundled python-embed."
+        },
+        "genericAgent.agentCorePath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to agent-core/. Empty = use bundled copy."
+        },
+        "genericAgent.logLevel": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug"],
+          "default": "info"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "npx gulp compile-extension:generic-agent",
+    "watch": "npx gulp watch-extension:generic-agent"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/ws": "^8.5.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/vscode.git"
+  }
+}
