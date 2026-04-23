@@ -3,6 +3,8 @@ import { initLogger, logger } from './logger';
 import { PythonProcessManager } from './processManager';
 import { AgentClient } from './agentClient';
 import { ChatViewProvider } from './chatView';
+import { IdeActions } from './ideActions';
+import { ContextProvider } from './contextProvider';
 
 let processMgr: PythonProcessManager | undefined;
 let agentClient: AgentClient | undefined;
@@ -62,20 +64,15 @@ async function bootstrapBackend(ctx: vscode.ExtensionContext, chat: ChatViewProv
 		);
 	});
 
-	// Stub handlers — real routing lands in M2.
-	agentClient.onMessage(msg => {
-		switch (msg.type) {
-			case 'edit_file':
-			case 'open_file':
-			case 'run_terminal':
-			case 'show_diff':
-				logger.debug(`TODO M2: handle ${msg.type}`, msg);
-				break;
-			default:
-				// silently ignore unknown types per protocol.md §7
-				break;
-		}
-	});
+	// M2: wire IDE actions (edit_file / open_file / run_terminal / show_diff)
+	// and begin pushing editor context once the handshake succeeds.
+	const actions = new IdeActions(agentClient);
+	ctx.subscriptions.push(actions.register());
+	ctx.subscriptions.push({ dispose: () => actions.dispose() });
+
+	const ctxProvider = new ContextProvider(agentClient);
+	ctxProvider.start();
+	ctx.subscriptions.push(ctxProvider);
 
 	agentClient.connect();
 }
