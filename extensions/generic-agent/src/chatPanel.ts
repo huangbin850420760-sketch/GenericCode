@@ -79,6 +79,9 @@ export class ChatPanel {
 			method?: string;
 			url?: string;
 			body?: unknown;
+			title?: string;
+			content?: string;
+			language?: string;
 		}) => {
 			logger.debug('chat panel ← webview', { kind: msg?.kind });
 			switch (msg?.kind) {
@@ -136,6 +139,13 @@ export class ChatPanel {
 					void vscode.commands.executeCommand(
 						'workbench.action.openSettings',
 						'genericAgent',
+					);
+					break;
+				case 'open_virtual_document':
+					void this.openVirtualDocument(
+						String(msg.title || 'GenericAgent'),
+						String(msg.content || ''),
+						String(msg.language || 'markdown'),
 					);
 					break;
 				case 'pick_files': {
@@ -266,6 +276,17 @@ export class ChatPanel {
 		} catch (e) {
 			this.post({ kind: 'apiResult', requestId, error: (e as Error).message });
 		}
+	}
+
+	private async openVirtualDocument(_title: string, content: string, language: string): Promise<void> {
+		const doc = await vscode.workspace.openTextDocument({
+			content,
+			language,
+		});
+		await vscode.window.showTextDocument(doc, {
+			preview: true,
+			viewColumn: vscode.ViewColumn.Active,
+		});
 	}
 
 	/**
@@ -3638,9 +3659,24 @@ export class ChatPanel {
 							d.textContent = String(brief).slice(0, 120);
 							row.appendChild(d);
 						}
-						row.addEventListener('click', function () {
+						row.addEventListener('click', async function (e) {
 							const tag = kind === 'sop' ? '@sop:' : '@skill:';
-							insertAtCursor(inputEl, tag + (it.name || ''));
+							if (e.altKey || e.shiftKey) {
+								insertAtCursor(inputEl, tag + (it.name || ''));
+								closeAllPanels();
+								return;
+							}
+							if (kind === 'sop') {
+								try {
+									const sop = await window.gaApi.getSop(it.name || '');
+									const content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : JSON.stringify(sop || it, null, 2);
+									vscode.postMessage({ kind: 'open_virtual_document', title: 'SOP: ' + (it.title || it.name || ''), content: content, language: 'markdown' });
+								} catch (err) {
+									vscode.postMessage({ kind: 'open_virtual_document', title: 'SOP: ' + (it.title || it.name || ''), content: 'Failed to load SOP: ' + (err.message || String(err)), language: 'markdown' });
+								}
+							} else {
+								vscode.postMessage({ kind: 'open_virtual_document', title: 'Tool: ' + (it.title || it.name || ''), content: JSON.stringify(it, null, 2), language: 'json' });
+							}
 							closeAllPanels();
 						});
 						skillsListEl.appendChild(row);
