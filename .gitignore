@@ -21,3 +21,8 @@ vscode.db
 product.overrides.json
 *.snap.actual
 .vscode-test
+
+# local dev logs
+*.log
+!extensions/**/test/*.log
+extensions/generic-agent/test/_bundle.dump.js

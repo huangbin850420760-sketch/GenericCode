@@ -48,8 +48,13 @@ export class PythonProcessManager implements vscode.Disposable {
 		const py = this.resolvePython(cfg.get<string>('pythonPath') || '');
 		const core = this.resolveAgentCore(cfg.get<string>('agentCorePath') || '');
 		const webappPy = path.join(core, 'frontends', 'webapp.py');
+		const workspaceMykey = this.resolveWorkspaceMykey();
 
-		if (!fs.existsSync(py)) {
+		// Only check existence for absolute/relative paths. A bare name like
+		// 'python.exe' or 'python3' relies on PATH resolution inside cp.spawn,
+		// so the existsSync check on a bare name is wrong — skip it.
+		const pyIsPath = path.isAbsolute(py) || py.includes(path.sep) || py.includes('/');
+		if (pyIsPath && !fs.existsSync(py)) {
 			throw new Error(`Python interpreter not found: ${py}`);
 		}
 		if (!fs.existsSync(webappPy)) {
@@ -58,9 +63,20 @@ export class PythonProcessManager implements vscode.Disposable {
 
 		logger.info('spawning python backend', { py, webappPy });
 
-		const child = cp.spawn(py, [webappPy, '--http-port', '0', '--ws-port', '0'], {
+		const child = cp.spawn(py, ['-u', webappPy, '--http-port', '0', '--ws-port', '0'], {
 			cwd: path.join(core, 'frontends'),
-			env: { ...process.env, GA_IDE_MODE: '1', PYTHONIOENCODING: 'utf-8' },
+			env: {
+				...process.env,
+				GA_IDE_MODE: '1',
+				PYTHONIOENCODING: 'utf-8',
+				// Critical: when stdout is a pipe (not a tty), CPython switches to
+				// block-buffered output. The extension relies on parsing the
+				// "[webapp] HTTP on …" line from stdout to learn the port, so we
+				// MUST force unbuffered. `-u` above covers most cases, but setting
+				// PYTHONUNBUFFERED belts-and-braces against sitecustomize etc.
+				PYTHONUNBUFFERED: '1',
+				...(workspaceMykey ? { GA_MYKEY_PATH: workspaceMykey } : {}),
+			},
 			stdio: ['ignore', 'pipe', 'pipe'],
 			windowsHide: true,
 		});
@@ -109,6 +125,8 @@ export class PythonProcessManager implements vscode.Disposable {
 			this.restartCount = 0;
 		}
 		if (this.restartCount >= 3) {
+			this.readyRejecter?.(new Error('Python backend exited before becoming ready. Check GenericAgent logs for the Python traceback.'));
+			this.readyRejecter = undefined;
 			vscode.window.showErrorMessage(
 				'GenericAgent backend has crashed 3 times in 5 minutes. Auto-restart disabled. Use "GenericAgent: Restart Backend" to retry.'
 			);
@@ -137,6 +155,20 @@ export class PythonProcessManager implements vscode.Disposable {
 
 	private resolveAgentCore(override: string): string {
 		if (override && fs.existsSync(override)) { return override; }
+		// Highest priority: user's workspace root IS an agent-core layout
+		// (i.e. a folder containing frontends/webapp.py).  This makes the
+		// extension follow the user's data — sessions, mykey, skills —
+		// instead of the bundled copy that ships with the extension.
+		for (const folder of vscode.workspace.workspaceFolders || []) {
+			const root = folder.uri.fsPath;
+			if (fs.existsSync(path.join(root, 'frontends', 'webapp.py'))) {
+				return root;
+			}
+			const sibling = path.join(root, 'agent-core');
+			if (fs.existsSync(path.join(sibling, 'frontends', 'webapp.py'))) {
+				return sibling;
+			}
+		}
 		// Built-in layout: <extensionPath>/../../agent-core/
 		const bundled = path.join(this.ctx.extensionPath, '..', '..', 'agent-core');
 		if (fs.existsSync(bundled)) { return bundled; }
@@ -146,6 +178,14 @@ export class PythonProcessManager implements vscode.Disposable {
 		// Last resort: user's workspace sibling
 		const workspace = path.join(this.ctx.extensionPath, '..', '..');
 		return path.join(workspace, 'agent-core');
+	}
+
+	private resolveWorkspaceMykey(): string | undefined {
+		for (const folder of vscode.workspace.workspaceFolders || []) {
+			const p = path.join(folder.uri.fsPath, 'mykey.json');
+			if (fs.existsSync(p)) { return p; }
+		}
+		return undefined;
 	}
 
 	dispose(): void {

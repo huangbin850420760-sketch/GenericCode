@@ -6,7 +6,6 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.97.0"
   },
@@ -15,8 +14,7 @@
   ],
   "main": "./out/extension",
   "activationEvents": [
-    "onView:genericAgent.chat",
-    "onCommand:genericAgent.showChat"
+    "onStartupFinished"
   ],
   "contributes": {
     "viewsContainers": {
@@ -45,38 +43,137 @@
         "title": "GenericAgent: Focus Chat"
       },
       {
+        "command": "genericAgent.openInPanel",
+        "title": "GenericAgent: Open Chat in Panel"
+      },
+      {
         "command": "genericAgent.restartBackend",
         "title": "GenericAgent: Restart Backend"
       },
       {
         "command": "genericAgent.showLogs",
         "title": "GenericAgent: Show Logs"
+      },
+      {
+        "command": "genericAgent.openMockup",
+        "title": "GenericAgent: Open Design Mockup"
+      },
+      {
+        "command": "genericAgent.editWithAgent",
+        "title": "GenericAgent: Edit Selection with Agent"
+      },
+      {
+        "command": "genericAgent.inlineEdit.accept",
+        "title": "GenericAgent: Accept Inline Edit",
+        "icon": "$(check)"
+      },
+      {
+        "command": "genericAgent.inlineEdit.reject",
+        "title": "GenericAgent: Reject Inline Edit",
+        "icon": "$(close)"
+      },
+      {
+        "command": "genericAgent.inlineEdit.regenerate",
+        "title": "GenericAgent: Regenerate Inline Edit",
+        "icon": "$(refresh)"
       }
     ],
+    "keybindings": [
+      {
+        "command": "genericAgent.editWithAgent",
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus && !editorReadonly"
+      },
+      {
+        "command": "genericAgent.inlineEdit.accept",
+        "key": "enter",
+        "when": "genericAgent.inlineEdit.active && editorTextFocus && !suggestWidgetVisible && !renameInputVisible && !inQuickOpen && !findWidgetVisible"
+      },
+      {
+        "command": "genericAgent.inlineEdit.reject",
+        "key": "escape",
+        "when": "genericAgent.inlineEdit.active && editorTextFocus && !suggestWidgetVisible && !renameInputVisible && !inQuickOpen && !findWidgetVisible"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "genericAgent.editWithAgent",
+          "group": "1_modification@99",
+          "when": "editorTextFocus && !editorReadonly"
+        }
+      ]
+    },
     "configuration": {
       "title": "GenericAgent",
       "properties": {
         "genericAgent.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to the Python interpreter. Empty = use bundled python-embed."
+          "description": "Python 解释器的绝对路径。留空则使用内置的 python-embed。(Absolute path to the Python interpreter.)"
         },
         "genericAgent.agentCorePath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to agent-core/. Empty = use bundled copy."
+          "description": "agent-core 目录的绝对路径。留空则使用内置副本。(Absolute path to agent-core/.)"
         },
         "genericAgent.logLevel": {
           "type": "string",
           "enum": ["error", "warn", "info", "debug"],
-          "default": "info"
+          "default": "info",
+          "description": "扩展主机的日志详细程度。(Logging verbosity for the extension host.)"
+        },
+        "genericAgent.language": {
+          "type": "string",
+          "enum": ["zh", "en"],
+          "enumDescriptions": ["简体中文", "English"],
+          "default": "zh",
+          "description": "聊天面板的界面语言。(UI language for the chat panel.)"
+        },
+        "genericAgent.autoOpenChat": {
+          "type": "boolean",
+          "default": true,
+          "description": "后端就绪时自动打开聊天面板。关闭后需通过活动栏手动启动。"
+        },
+        "genericAgent.theme": {
+          "type": "string",
+          "enum": ["auto", "dark", "light"],
+          "default": "auto",
+          "description": "聊天面板主题。auto 跟随 VS Code 当前颜色主题。"
+        },
+        "genericAgent.collapseThinking": {
+          "type": "boolean",
+          "default": true,
+          "description": "默认折叠助手的推理/思考过程。"
+        },
+        "genericAgent.flattenSingleTurn": {
+          "type": "boolean",
+          "default": true,
+          "description": "在回答未调用工具时隐藏轮次分隔和摘要卡片，让对话更接近自然行文。"
+        },
+        "genericAgent.autonomousIdleSeconds": {
+          "type": "number",
+          "default": 1800,
+          "minimum": 60,
+          "description": "自主模式在多少秒空闲后触发一次自动任务。"
+        },
+        "genericAgent.sendShortcut": {
+          "type": "string",
+          "enum": ["enter", "ctrl-enter"],
+          "enumDescriptions": [
+            "Enter 发送，Shift+Enter 换行",
+            "Ctrl+Enter 发送，Enter 换行"
+          ],
+          "default": "enter",
+          "description": "输入框中发送消息的快捷键。"
         }
       }
     }
   },
   "scripts": {
-    "compile": "npx gulp compile-extension:generic-agent",
-    "watch": "npx gulp watch-extension:generic-agent"
+    "compile": "npx tsc -p .",
+    "watch": "npx tsc -w -p ."
   },
   "dependencies": {
     "ws": "^8.18.0"
