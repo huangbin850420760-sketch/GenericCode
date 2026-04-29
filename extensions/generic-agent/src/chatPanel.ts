@@ -1732,7 +1732,7 @@ export class ChatPanel {
 		</div>
 		<div class="dropdown-panel" id="panel-settings" role="menu" aria-label="Settings">
 			<div class="dropdown-head">
-				<span style="font-size:13px;font-weight:600;color:var(--fg-strong);">Settings</span>
+				<span id="settings-title" style="font-size:13px;font-weight:600;color:var(--fg-strong);">Settings</span>
 			</div>
 			<div class="dropdown-body" id="settings-body">
 				<div class="dropdown-empty">Loading…</div>
@@ -3449,6 +3449,7 @@ export class ChatPanel {
 			const skillsListEl = document.getElementById('skills-list');
 			const skillsSearchEl = document.getElementById('skills-search');
 			const settingsBodyEl = document.getElementById('settings-body');
+			const settingsTitleEl = document.getElementById('settings-title');
 			const settingsReloadBtn = document.getElementById('settings-reload');
 			const welcomeEl = document.getElementById('welcome');
 			const modeTriggerEl = document.getElementById('mode-trigger');
@@ -3514,12 +3515,15 @@ export class ChatPanel {
 			botsBtn.addEventListener('click', function (e) {
 				e.stopPropagation();
 				togglePanel(panelSettings, botsBtn, function () {
-					loadSettings();
-					vscode.postMessage({ kind: 'bot_status' });
+					if (settingsTitleEl) { settingsTitleEl.textContent = '机器人管理'; }
+					loadSettings().then(function () {
+						vscode.postMessage({ kind: 'bot_status' });
+					});
 				});
 			});
 			settingsBtn.addEventListener('click', function (e) {
 				e.stopPropagation();
+				if (settingsTitleEl) { settingsTitleEl.textContent = 'Settings'; }
 				vscode.postMessage({ kind: 'open_settings' });
 			});
 
@@ -3904,9 +3908,10 @@ export class ChatPanel {
 
 			async function loadSettings() {
 				try {
-					const cfg = await window.gaApi.getLLMConfig();
 					settingsBodyEl.innerHTML = '';
 					settingsBodyEl.innerHTML = '<div class="dropdown-section">机器人管理</div><div id="bot-error" class="dropdown-empty" style="text-align:left;color:var(--danger);" hidden></div><div id="bot-list"><div class="dropdown-empty">Loading bots…</div></div><div class="dropdown-section">LLM Profiles</div>';
+					let cfg = null;
+					try { cfg = await window.gaApi.getLLMConfig(); } catch (_) {}
 					const llms = (cfg && cfg.llms) || [];
 					if (!llms.length) {
 						settingsBodyEl.insertAdjacentHTML('beforeend', '<div class="dropdown-empty">No LLM profiles configured</div>');
