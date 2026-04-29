@@ -3576,10 +3576,7 @@ export class ChatPanel {
 					const messages = restored && Array.isArray(restored.history)
 						? restored.history
 						: await window.gaApi.getSessionHistory(path);
-					(messages || []).forEach(function (m) {
-						if (!m || !m.role) { return; }
-						appendHistoryMessage(m.role, historyMessageContent(m));
-					});
+					renderHistoryMessages(messages || []);
 					if (!logEl.children.length) {
 						appendHistoryMessage('system', 'This session has no renderable messages.');
 					}
@@ -3601,14 +3598,62 @@ export class ChatPanel {
 				if (!Array.isArray(m.parts)) { return ''; }
 				return m.parts.map(function (p) {
 					if (!p || typeof p !== 'object') { return ''; }
-					if (p.type === 'user_text' || p.type === 'text' || p.type === 'thinking' || p.type === 'tool_result') {
+					if (p.type === 'user_text' || p.type === 'text') {
 						return p.content || '';
 					}
+					if (p.type === 'thinking') { return '<thinking>' + (p.content || '') + '</thinking>'; }
+					if (p.type === 'tool_result') { return formatToolOutput(p.content || ''); }
 					if (p.type === 'tool_use') {
-						return '工具调用: ' + (p.name || '?') + '\\n' + JSON.stringify(p.input || {}, null, 2);
+						return formatToolUse(p);
 					}
 					return p.content || '';
 				}).filter(Boolean).join('\\n\\n');
+			}
+
+			function renderHistoryMessages(messages) {
+				let pendingAssistant = null;
+				const flushAssistant = function () {
+					if (pendingAssistant) {
+						appendHistoryMessage('assistant', pendingAssistant);
+						pendingAssistant = null;
+					}
+				};
+				(messages || []).forEach(function (m) {
+					if (!m || !m.role) { return; }
+					if (m.role === 'assistant') {
+						flushAssistant();
+						pendingAssistant = historyMessageContent(m);
+						return;
+					}
+					if (m.role === 'user' && Array.isArray(m.parts)) {
+						const toolResults = m.parts.filter(function (p) { return p && p.type === 'tool_result'; });
+						const userTexts = m.parts.filter(function (p) { return p && p.type !== 'tool_result'; });
+						if (toolResults.length && pendingAssistant) {
+							pendingAssistant += '\\n' + toolResults.map(function (p) { return formatToolOutput(p.content || ''); }).join('\\n');
+						}
+						if (userTexts.length) {
+							flushAssistant();
+							appendHistoryMessage('user', historyMessageContent({ role: 'user', parts: userTexts }));
+						}
+						return;
+					}
+					flushAssistant();
+					appendHistoryMessage(m.role, historyMessageContent(m));
+				});
+				flushAssistant();
+			}
+
+			function formatToolUse(p) {
+				const fence = String.fromCharCode(96).repeat(4);
+				return '🛠️ Tool: ' + String.fromCharCode(96) + (p.name || '?') + String.fromCharCode(96) + '  📥 args:\\n'
+					+ fence + 'text\\n'
+					+ JSON.stringify(p.input || {}, null, 2) + '\\n'
+					+ fence;
+			}
+
+			function formatToolOutput(content) {
+				const fence = String.fromCharCode(96).repeat(5);
+				return fence + '\\n' + String(content || '') + '\\n' + fence;
 			}
 
 			function appendHistoryMessage(role, content) {
