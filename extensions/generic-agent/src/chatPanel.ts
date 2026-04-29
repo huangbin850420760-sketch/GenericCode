@@ -3571,12 +3571,18 @@ export class ChatPanel {
 						el.classList.toggle('active', el.dataset.path === path);
 					});
 					logEl.innerHTML = '';
-					const messages = await window.gaApi.getSessionHistory(path);
+					let restored = null;
+					try { restored = await window.gaApi.restoreSession(path); } catch (_) {}
+					const messages = restored && Array.isArray(restored.history)
+						? restored.history
+						: await window.gaApi.getSessionHistory(path);
 					(messages || []).forEach(function (m) {
-						if (!m || !m.role || !m.content) { return; }
-						appendHistoryMessage(m.role, m.content);
+						if (!m || !m.role) { return; }
+						appendHistoryMessage(m.role, historyMessageContent(m));
 					});
-					try { await window.gaApi.restoreSession(path); } catch (_) {}
+					if (!logEl.children.length) {
+						appendHistoryMessage('system', 'This session has no renderable messages.');
+					}
 					refreshWelcome();
 					refreshJumpButton();
 					scrollToBottom(true);
@@ -3586,6 +3592,23 @@ export class ChatPanel {
 					refreshWelcome();
 					vscode.postMessage({ kind: 'info', text: 'Failed to open session: ' + (e.message || e) });
 				}
+			}
+
+			function historyMessageContent(m) {
+				if (m.content != null) {
+					return typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2);
+				}
+				if (!Array.isArray(m.parts)) { return ''; }
+				return m.parts.map(function (p) {
+					if (!p || typeof p !== 'object') { return ''; }
+					if (p.type === 'user_text' || p.type === 'text' || p.type === 'thinking' || p.type === 'tool_result') {
+						return p.content || '';
+					}
+					if (p.type === 'tool_use') {
+						return '工具调用: ' + (p.name || '?') + '\\n' + JSON.stringify(p.input || {}, null, 2);
+					}
+					return p.content || '';
+				}).filter(Boolean).join('\\n\\n');
 			}
 
 			function appendHistoryMessage(role, content) {
