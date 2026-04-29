@@ -92,6 +92,7 @@ export class ChatPanel {
 			title?: string;
 			content?: string;
 			language?: string;
+			sopName?: string;
 		}) => {
 			logger.debug('chat panel ← webview', { kind: msg?.kind });
 			switch (msg?.kind) {
@@ -166,6 +167,9 @@ export class ChatPanel {
 						String(msg.content || ''),
 						String(msg.language || 'markdown'),
 					);
+					break;
+				case 'open_sop_source':
+					void this.openSopSource(String(msg.sopName || ''));
 					break;
 				case 'pick_files': {
 					// Open the native VS Code file picker and return the
@@ -306,6 +310,30 @@ export class ChatPanel {
 			preview: true,
 			viewColumn: vscode.ViewColumn.Active,
 		});
+	}
+
+	private async openSopSource(name: string): Promise<void> {
+		const file = resolveSopSource(name);
+		if (!file) {
+			vscode.window.showWarningMessage(`GenericAgent: SOP 源文件不存在: ${name}`);
+			return;
+		}
+		const content = await fs.promises.readFile(file, 'utf8');
+		const doc = await vscode.workspace.openTextDocument({ content, language: 'markdown' });
+		await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Active });
+		const edit = await vscode.window.showInformationMessage(
+			`已只读预览 SOP：${nodePath.basename(file)}`,
+			'编辑源文件',
+		);
+		if (edit !== '编辑源文件') { return; }
+		const confirm = await vscode.window.showWarningMessage(
+			`将打开可编辑源文件：${file}`,
+			{ modal: true },
+			'继续编辑',
+		);
+		if (confirm !== '继续编辑') { return; }
+		const source = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+		await vscode.window.showTextDocument(source, { preview: false, viewColumn: vscode.ViewColumn.Active });
 	}
 
 	private async handleBotStart(bot: string): Promise<void> {
@@ -1694,7 +1722,7 @@ export class ChatPanel {
 		<button class="toolbar-icon" id="btn-history" data-i18n-title="btn.history" title="History" aria-label="History">
 			<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.2 1.5"/></svg>
 		</button>
-		<button class="toolbar-icon" id="btn-skills" data-i18n-title="btn.skills" title="Skills &amp; SOPs" aria-label="Skills">
+		<button class="toolbar-icon" id="btn-skills" data-i18n-title="btn.skills" title="SOPs" aria-label="SOPs">
 			<svg viewBox="0 0 16 16"><path d="M8 1.5l1.7 4.4 4.6.4-3.5 3 1.1 4.5L8 11.4 4.1 13.8l1.1-4.5-3.5-3 4.6-.4z"/></svg>
 		</button>
 		<button class="toolbar-icon" id="btn-bots" title="机器人管理" aria-label="机器人管理">
@@ -1722,9 +1750,9 @@ export class ChatPanel {
 				<button id="history-newchat">+ New chat</button>
 			</div>
 		</div>
-		<div class="dropdown-panel" id="panel-skills" role="menu" aria-label="Skills">
+		<div class="dropdown-panel" id="panel-skills" role="menu" aria-label="SOPs">
 			<div class="dropdown-head">
-				<input id="skills-search" type="text" placeholder="Search skills &amp; SOPs…" />
+				<input id="skills-search" type="text" placeholder="Search SOPs…" />
 			</div>
 			<div class="dropdown-body" id="skills-list">
 				<div class="dropdown-empty">Loading…</div>
@@ -1799,7 +1827,7 @@ export class ChatPanel {
 			<div class="welcome-card" data-action="open-skills">
 				<div class="ic pink"><svg width="14" height="14" viewBox="0 0 16 16" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linejoin="round"><path d="M8 1.5l1.7 4.4 4.6.4-3.5 3 1.1 4.5L8 11.4 4.1 13.8l1.1-4.5-3.5-3 4.6-.4z"/></svg></div>
 				<div class="ttl" data-i18n="welcome.skills">Skills</div>
-				<div class="desc" data-i18n="welcome.skills.desc">Browse tools &amp; SOPs available to the agent.</div>
+				<div class="desc" data-i18n="welcome.skills.desc">Browse SOPs available to the agent.</div>
 			</div>
 		</div>
 		<div class="welcome-shortcuts">
@@ -1886,8 +1914,8 @@ export class ChatPanel {
 					'welcome.newChat.desc':'Start a fresh conversation in Agent mode.',
 					'welcome.recent':     'Recent',
 					'welcome.recent.desc':'Resume one of your recent conversations.',
-					'welcome.skills':     'Skills',
-					'welcome.skills.desc':'Browse tools and SOPs available to the agent.',
+					'welcome.skills':     'SOPs',
+					'welcome.skills.desc':'Browse SOPs available to the agent.',
 					'composer.placeholder': 'Plan, @ for context, / for commands',
 					'composer.send':  'Send',
 					'composer.stop':  'Stop',
@@ -1901,7 +1929,7 @@ export class ChatPanel {
 					'auto.off':      'Off',
 					'btn.newchat':   'New chat',
 					'btn.history':   'History',
-					'btn.skills':    'Skills & SOPs',
+					'btn.skills':    'SOPs',
 					'btn.settings':  'Settings',
 					'btn.more':      'More actions',
 					'btn.clear':     'Clear conversation',
@@ -1927,8 +1955,8 @@ export class ChatPanel {
 					'welcome.newChat.desc':'以 Agent 模式开启一段全新对话。',
 					'welcome.recent':     '最近',
 					'welcome.recent.desc':'继续最近一次的对话。',
-					'welcome.skills':     '技能',
-					'welcome.skills.desc':'浏览可用的工具与 SOP。',
+					'welcome.skills':     'SOP',
+					'welcome.skills.desc':'浏览可用的 SOP。',
 					'composer.placeholder': '输入消息，@ 引用上下文，/ 调用命令',
 					'composer.send':  '发送',
 					'composer.stop':  '停止',
@@ -1942,7 +1970,7 @@ export class ChatPanel {
 					'auto.off':      '关闭',
 					'btn.newchat':   '新对话',
 					'btn.history':   '历史',
-					'btn.skills':    '技能与 SOP',
+					'btn.skills':    'SOP',
 					'btn.settings':  '设置',
 					'btn.more':      '更多操作',
 					'btn.clear':     '清空对话',
@@ -3770,22 +3798,17 @@ export class ChatPanel {
 
 			function renderSkills(filter) {
 				const f = (filter || '').trim().toLowerCase();
-				const tools = (allSkills.tools || []).filter(function (it) {
-					if (!f) { return true; }
-					const hay = ((it.name || '') + ' ' + (it.desc || it.summary || '')).toLowerCase();
-					return hay.indexOf(f) >= 0;
-				});
 				const sops = (allSkills.sops || []).filter(function (it) {
 					if (!f) { return true; }
 					const hay = ((it.name || '') + ' ' + (it.desc || it.summary || '')).toLowerCase();
 					return hay.indexOf(f) >= 0;
 				});
-				if (tools.length + sops.length === 0) {
-					skillsListEl.innerHTML = '<div class="dropdown-empty">No matching skills</div>';
+				if (sops.length === 0) {
+					skillsListEl.innerHTML = '<div class="dropdown-empty">No matching SOPs</div>';
 					return;
 				}
 				skillsListEl.innerHTML = '';
-				const renderGroup = function (label, items, kind) {
+				const renderGroup = function (label, items) {
 					if (!items.length) { return; }
 					const h = document.createElement('div');
 					h.className = 'dropdown-section';
@@ -3806,30 +3829,18 @@ export class ChatPanel {
 							row.appendChild(d);
 						}
 						row.addEventListener('click', async function (e) {
-							const tag = kind === 'sop' ? '@sop:' : '@skill:';
 							if (e.altKey || e.shiftKey) {
-								insertAtCursor(inputEl, tag + (it.name || ''));
+								insertAtCursor(inputEl, '@sop:' + (it.name || ''));
 								closeAllPanels();
 								return;
 							}
-							if (kind === 'sop') {
-								try {
-									const sop = await window.gaApi.getSop(it.name || '');
-									const content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : JSON.stringify(sop || it, null, 2);
-									vscode.postMessage({ kind: 'open_virtual_document', title: 'SOP: ' + (it.title || it.name || ''), content: content, language: 'markdown' });
-								} catch (err) {
-									vscode.postMessage({ kind: 'open_virtual_document', title: 'SOP: ' + (it.title || it.name || ''), content: 'Failed to load SOP: ' + (err.message || String(err)), language: 'markdown' });
-								}
-							} else {
-								vscode.postMessage({ kind: 'open_virtual_document', title: 'Tool: ' + (it.title || it.name || ''), content: JSON.stringify(it, null, 2), language: 'json' });
-							}
+							vscode.postMessage({ kind: 'open_sop_source', sopName: it.name || '' });
 							closeAllPanels();
 						});
 						skillsListEl.appendChild(row);
 					});
 				};
-				renderGroup('Tools', tools, 'tool');
-				renderGroup('SOPs', sops, 'sop');
+				renderGroup('SOPs', sops);
 			}
 
 			async function loadSkills() {
@@ -4455,6 +4466,23 @@ async function readTextSafe(uri: vscode.Uri): Promise<string> {
 	} catch {
 		return '';
 	}
+}
+
+function resolveSopSource(name: string): string | undefined {
+	const safe = nodePath.basename(name || '');
+	if (!safe.endsWith('.md')) { return undefined; }
+	const roots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+	const candidates: string[] = [];
+	for (const root of roots) {
+		candidates.push(nodePath.join(root, 'memory', safe));
+		candidates.push(nodePath.join(nodePath.dirname(root), 'GenericAgent', 'memory', safe));
+	}
+	for (const p of candidates) {
+		try {
+			if (fs.existsSync(p) && fs.statSync(p).isFile()) { return p; }
+		} catch {}
+	}
+	return undefined;
 }
 
 /**
