@@ -33,6 +33,7 @@ export class PythonProcessManager implements vscode.Disposable {
 	private readyRejecter?: (err: Error) => void;
 	private restartCount = 0;
 	private lastRestartAt = 0;
+	private agentCorePath = '';
 
 	readonly ready: Promise<BackendPorts>;
 
@@ -47,6 +48,7 @@ export class PythonProcessManager implements vscode.Disposable {
 		const cfg = vscode.workspace.getConfiguration('genericAgent');
 		const py = this.resolvePython(cfg.get<string>('pythonPath') || '');
 		const core = this.resolveAgentCore(cfg.get<string>('agentCorePath') || '');
+		this.agentCorePath = core;
 		const webappPy = path.join(core, 'frontends', 'webapp.py');
 		const workspaceMykey = this.resolveWorkspaceMykey();
 
@@ -164,6 +166,10 @@ export class PythonProcessManager implements vscode.Disposable {
 			if (fs.existsSync(path.join(root, 'frontends', 'webapp.py'))) {
 				return root;
 			}
+			const genericAgentSibling = path.join(path.dirname(root), 'GenericAgent');
+			if (fs.existsSync(path.join(genericAgentSibling, 'frontends', 'webapp.py'))) {
+				return genericAgentSibling;
+			}
 			const sibling = path.join(root, 'agent-core');
 			if (fs.existsSync(path.join(sibling, 'frontends', 'webapp.py'))) {
 				return sibling;
@@ -181,6 +187,10 @@ export class PythonProcessManager implements vscode.Disposable {
 	}
 
 	private resolveWorkspaceMykey(): string | undefined {
+		if (this.agentCorePath) {
+			const p = path.join(this.agentCorePath, 'mykey.json');
+			if (fs.existsSync(p)) { return p; }
+		}
 		for (const folder of vscode.workspace.workspaceFolders || []) {
 			const p = path.join(folder.uri.fsPath, 'mykey.json');
 			if (fs.existsSync(p)) { return p; }
