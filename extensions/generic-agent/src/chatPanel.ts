@@ -3,6 +3,13 @@ import * as fs from 'fs';
 import * as nodePath from 'path';
 import { logger } from './logger';
 import { AgentClient, StatusPayload } from './agentClient';
+import { BotKind, BotProcessManager } from './botProcessManager';
+
+const BOT_KINDS = new Set<string>(['tg', 'qq', 'feishu', 'wecom', 'dingtalk', 'wechat']);
+
+function isBotKind(value: string): value is BotKind {
+	return BOT_KINDS.has(value);
+}
 
 /**
  * Editor-area WebviewPanel hosting a native chat UI.
@@ -37,7 +44,7 @@ export class ChatPanel {
 	private readonly httpPort: number;
 	private disposables: vscode.Disposable[] = [];
 
-	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number): void {
+	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number, botMgr?: BotProcessManager): void {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
 
 		if (ChatPanel.current) {
@@ -56,10 +63,10 @@ export class ChatPanel {
 			},
 		);
 
-		ChatPanel.current = new ChatPanel(panel, client, httpPort);
+		ChatPanel.current = new ChatPanel(panel, client, httpPort, botMgr);
 	}
 
-	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number) {
+	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number, private readonly botMgr?: BotProcessManager) {
 		this.httpPort = httpPort;
 		this.panel = panel;
 		this.panel.webview.html = this.html();
@@ -140,6 +147,15 @@ export class ChatPanel {
 						'workbench.action.openSettings',
 						'genericAgent',
 					);
+					break;
+				case 'bot_status':
+					this.post({ kind: 'bot_status', bots: this.botMgr?.status() || [] });
+					break;
+				case 'bot_start':
+					void this.handleBotStart(String((msg as { bot?: unknown }).bot || ''));
+					break;
+				case 'bot_stop':
+					this.handleBotStop(String((msg as { bot?: unknown }).bot || ''));
 					break;
 				case 'open_virtual_document':
 					void this.openVirtualDocument(
@@ -287,6 +303,29 @@ export class ChatPanel {
 			preview: true,
 			viewColumn: vscode.ViewColumn.Active,
 		});
+	}
+
+	private async handleBotStart(bot: string): Promise<void> {
+		if (!this.botMgr || !isBotKind(bot)) {
+			this.post({ kind: 'bot_error', error: 'Unknown bot: ' + bot });
+			return;
+		}
+		try {
+			await this.botMgr.start(bot, false);
+			this.post({ kind: 'bot_status', bots: this.botMgr.status() });
+		} catch (e) {
+			this.post({ kind: 'bot_error', error: (e as Error).message });
+			this.post({ kind: 'bot_status', bots: this.botMgr.status() });
+		}
+	}
+
+	private handleBotStop(bot: string): void {
+		if (!this.botMgr || !isBotKind(bot)) {
+			this.post({ kind: 'bot_error', error: 'Unknown bot: ' + bot });
+			return;
+		}
+		this.botMgr.stop(bot, false);
+		this.post({ kind: 'bot_status', bots: this.botMgr.status() });
 	}
 
 	/**
@@ -1621,6 +1660,15 @@ export class ChatPanel {
 			border-color: var(--border-strong);
 			color: var(--fg-strong);
 		}
+		.bot-card { margin: 6px 8px 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-glass); }
+		.bot-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+		.bot-title { font-weight: 650; color: var(--fg-strong); }
+		.bot-pill { margin-left: auto; font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-muted); }
+		.bot-card.running .bot-pill { color: var(--mint); border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.10); }
+		.bot-card.missing .bot-pill { color: var(--amber); border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.10); }
+		.bot-meta { color: var(--fg-muted); font-size: 12px; line-height: 1.45; margin-bottom: 9px; }
+		.bot-actions { display: flex; gap: 8px; }
+		.bot-actions button { flex: 1; height: 28px; border-radius: 8px; }
 	</style>
 </head>
 <body>
@@ -3371,6 +3419,12 @@ export class ChatPanel {
 						renderPopup(trigger.items, 0);
 						break;
 					}
+					case 'bot_status':
+						renderBotStatus(Array.isArray(m.bots) ? m.bots : []);
+						break;
+					case 'bot_error':
+						renderBotError(m.error || 'Bot operation failed');
+						break;
 				}
 			});
 
@@ -3452,16 +3506,13 @@ export class ChatPanel {
 			});
 			settingsBtn.addEventListener('click', function (e) {
 				e.stopPropagation();
-				// Cursor-style integration: jump straight to VS Code's
-				// native Settings UI filtered to genericAgent.* — every
-				// useful option now lives there.  Hold Alt/Shift to fall
-				// back to the legacy in-panel LLM editor.
 				if (e.altKey || e.shiftKey) {
-					togglePanel(panelSettings, settingsBtn, function () {
-						if (!settingsLoaded) { loadSettings(); }
-					});
-				} else {
 					vscode.postMessage({ kind: 'open_settings' });
+				} else {
+					togglePanel(panelSettings, settingsBtn, function () {
+						loadSettings();
+						vscode.postMessage({ kind: 'bot_status' });
+					});
 				}
 			});
 
@@ -3799,18 +3850,59 @@ export class ChatPanel {
 				onInputChanged();
 			}
 
+			function renderBotError(text) {
+				const el = document.getElementById('bot-error');
+				if (el) { el.textContent = text; el.hidden = false; }
+			}
+
+			function renderBotStatus(bots) {
+				const host = document.getElementById('bot-list');
+				if (!host) { return; }
+				host.innerHTML = '';
+				bots.forEach(function (bot) {
+					const card = document.createElement('div');
+					card.className = 'bot-card' + (bot.running ? ' running' : '') + (!bot.configured ? ' missing' : '');
+					const head = document.createElement('div');
+					head.className = 'bot-head';
+					const title = document.createElement('div');
+					title.className = 'bot-title';
+					title.textContent = bot.label || bot.kind;
+					const pill = document.createElement('div');
+					pill.className = 'bot-pill';
+					pill.textContent = bot.running ? '运行中' : (!bot.configured ? '未配置' : '已停止');
+					head.appendChild(title); head.appendChild(pill);
+					const meta = document.createElement('div');
+					meta.className = 'bot-meta';
+					meta.textContent = bot.running ? ('pid ' + bot.pid) : (!bot.configured ? ('缺少: ' + (bot.missingKeys || []).join(', ')) : '可随时启动/停止');
+					const actions = document.createElement('div');
+					actions.className = 'bot-actions';
+					const toggle = document.createElement('button');
+					toggle.textContent = bot.running ? '停止' : '启动';
+					toggle.disabled = !bot.running && !bot.configured;
+					toggle.addEventListener('click', function (e) {
+						e.stopPropagation();
+						toggle.disabled = true;
+						vscode.postMessage({ kind: bot.running ? 'bot_stop' : 'bot_start', bot: bot.kind });
+						setTimeout(function () { vscode.postMessage({ kind: 'bot_status' }); }, 800);
+					});
+					actions.appendChild(toggle);
+					card.appendChild(head); card.appendChild(meta); card.appendChild(actions);
+					host.appendChild(card);
+				});
+			}
+
 			async function loadSettings() {
 				try {
 					const cfg = await window.gaApi.getLLMConfig();
 					settingsBodyEl.innerHTML = '';
+					settingsBodyEl.innerHTML = '<div class="dropdown-section">机器人管理</div><div id="bot-error" class="dropdown-empty" style="text-align:left;color:var(--danger);" hidden></div><div id="bot-list"><div class="dropdown-empty">Loading bots…</div></div><div class="dropdown-section">LLM Profiles</div>';
 					const llms = (cfg && cfg.llms) || [];
 					if (!llms.length) {
-						settingsBodyEl.innerHTML = '<div class="dropdown-empty">No LLM profiles configured</div>';
+						settingsBodyEl.insertAdjacentHTML('beforeend', '<div class="dropdown-empty">No LLM profiles configured</div>');
 					} else {
 						const sec = document.createElement('div');
 						sec.className = 'dropdown-section';
 						sec.textContent = 'LLM Profiles (' + llms.length + ')';
-						settingsBodyEl.appendChild(sec);
 						llms.forEach(function (p) {
 							const row = document.createElement('div');
 							row.className = 'dropdown-row';

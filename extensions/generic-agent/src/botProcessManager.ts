@@ -6,6 +6,14 @@ import { Readable } from 'stream';
 import { logger } from './logger';
 
 export type BotKind = 'tg' | 'qq' | 'feishu' | 'wecom' | 'dingtalk' | 'wechat';
+export type BotStatus = {
+	kind: BotKind;
+	label: string;
+	running: boolean;
+	pid?: number;
+	configured: boolean;
+	missingKeys: string[];
+};
 
 type BotProc = cp.ChildProcessByStdio<null, Readable, Readable>;
 
@@ -109,6 +117,23 @@ export class BotProcessManager implements vscode.Disposable {
 			const child = this.procs.get(spec.kind);
 			return `${child ? '●' : '○'} ${spec.label}${child ? ` pid=${child.pid}` : ''}`;
 		}).join('\n');
+	}
+
+	status(): BotStatus[] {
+		const cfg = vscode.workspace.getConfiguration('genericAgent');
+		const core = this.resolveAgentCore(cfg.get<string>('agentCorePath') || '');
+		return BotProcessManager.specs().map(spec => {
+			const child = this.procs.get(spec.kind);
+			const missingKeys = this.missingKeys(core, spec.requiredKeys);
+			return {
+				kind: spec.kind,
+				label: spec.label,
+				running: !!child,
+				pid: child?.pid,
+				configured: missingKeys.length === 0,
+				missingKeys,
+			};
+		});
 	}
 
 	dispose(): void {

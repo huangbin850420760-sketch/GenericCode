@@ -48,7 +48,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 				vscode.window.showWarningMessage('GenericAgent: backend not ready yet.');
 				return;
 			}
-			ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort);
+			ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort, botMgr);
 		}),
 		vscode.commands.registerCommand('genericAgent.showLogs', () => logger.show()),
 		vscode.commands.registerCommand('genericAgent.startBot', async () => {
@@ -104,7 +104,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 		agentClient = new AgentClient('ws://127.0.0.1:9', version);
 		lastHttpPort = 0;
 		ctx.subscriptions.push(agentClient);
-		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort);
+		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort, botMgr);
 	}
 	botMgr.startEnabled().catch(e => logger.error('start enabled bots failed', (e as Error).message));
 
@@ -121,7 +121,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 			agentClient = new AgentClient('ws://127.0.0.1:9', version);
 			ctx.subscriptions.push(agentClient);
 		}
-		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort ?? 0);
+		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort ?? 0, botMgr);
 		vscode.window.showErrorMessage(`GenericAgent: backend failed to start — ${msg}`);
 	}
 }
@@ -159,7 +159,7 @@ async function bootstrapBackend(ctx: vscode.ExtensionContext, chat: ChatViewProv
 		const autoOpen = cfg.get<boolean>('autoOpenChat', true);
 		if (autoOpen && !ChatPanel.current && agentClient && lastHttpPort !== undefined) {
 			try {
-				ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort);
+				ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort, botMgr);
 			} catch (e) {
 				logger.warn('auto-open chat panel failed', (e as Error).message);
 			}
