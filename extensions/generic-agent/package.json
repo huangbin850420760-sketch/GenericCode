@@ -55,6 +55,18 @@
         "title": "GenericAgent: Show Logs"
       },
       {
+        "command": "genericAgent.startBot",
+        "title": "GenericAgent: Start Bot"
+      },
+      {
+        "command": "genericAgent.stopBot",
+        "title": "GenericAgent: Stop Bot"
+      },
+      {
+        "command": "genericAgent.showBotStatus",
+        "title": "GenericAgent: Show Bot Status"
+      },
+      {
         "command": "genericAgent.openMockup",
         "title": "GenericAgent: Open Design Mockup"
       },
@@ -117,6 +129,16 @@
           "type": "string",
           "default": "",
           "description": "agent-core 目录的绝对路径。留空则使用内置副本。(Absolute path to agent-core/.)"
+        },
+        "genericAgent.enabledBots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tg", "qq", "feishu", "wecom", "dingtalk", "wechat"]
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "扩展启动时自动启动的聊天平台机器人。凭证仍从 GenericAgent 的 mykey.json 读取。"
         },
         "genericAgent.logLevel": {
           "type": "string",

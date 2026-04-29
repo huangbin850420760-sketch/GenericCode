@@ -7,11 +7,13 @@ import { ChatPanel, registerApplyProvider } from './chatPanel';
 import { IdeActions } from './ideActions';
 import { ContextProvider } from './contextProvider';
 import { InlineEditController } from './inlineEdit';
+import { BotKind, BotProcessManager } from './botProcessManager';
 
 let processMgr: PythonProcessManager | undefined;
 let agentClient: AgentClient | undefined;
 let inlineEdit: InlineEditController | undefined;
 let lastHttpPort: number | undefined;
+let botMgr: BotProcessManager | undefined;
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 	initLogger();
@@ -21,6 +23,8 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 	// happen once, before any chat panel opens; the provider is disposed
 	// automatically with the extension context.
 	registerApplyProvider(ctx);
+	botMgr = new BotProcessManager(ctx);
+	ctx.subscriptions.push(botMgr);
 
 	// 1. Webview provider registered immediately; it will show a loading state
 	//    until the backend reports its ports.
@@ -47,6 +51,28 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 			ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort);
 		}),
 		vscode.commands.registerCommand('genericAgent.showLogs', () => logger.show()),
+		vscode.commands.registerCommand('genericAgent.startBot', async () => {
+			if (!botMgr) { return; }
+			const picked = await pickBot('启动哪个机器人？');
+			if (!picked) { return; }
+			try {
+				await botMgr.start(picked);
+			} catch (e) {
+				const msg = (e as Error).message;
+				logger.error('start bot failed', msg);
+				vscode.window.showErrorMessage(`GenericAgent: ${msg}`);
+			}
+		}),
+		vscode.commands.registerCommand('genericAgent.stopBot', async () => {
+			if (!botMgr) { return; }
+			const picked = await pickBot('停止哪个机器人？');
+			if (!picked) { return; }
+			botMgr.stop(picked);
+		}),
+		vscode.commands.registerCommand('genericAgent.showBotStatus', () => {
+			if (!botMgr) { return; }
+			vscode.window.showInformationMessage(botMgr.statusText(), { modal: true });
+		}),
 		vscode.commands.registerCommand('genericAgent.openMockup', async () => {
 			// Show the static design mockup (media/mockup.html) in a webview.
 			// Pure UI preview — no backend wiring — so the user can confirm
@@ -80,6 +106,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 		ctx.subscriptions.push(agentClient);
 		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort);
 	}
+	botMgr.startEnabled().catch(e => logger.error('start enabled bots failed', (e as Error).message));
 
 	// 4. Kick off the backend
 	try {
@@ -168,4 +195,17 @@ export function deactivate(): void {
 	logger.info('deactivating');
 	agentClient?.dispose();
 	processMgr?.dispose();
+	botMgr?.dispose();
+}
+
+async function pickBot(placeHolder: string): Promise<BotKind | undefined> {
+	const picked = await vscode.window.showQuickPick(
+		BotProcessManager.specs().map(spec => ({
+			label: spec.label,
+			description: spec.kind,
+			botKind: spec.kind,
+		})),
+		{ placeHolder },
+	);
+	return picked?.botKind;
 }
