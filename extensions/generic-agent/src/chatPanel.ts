@@ -868,6 +868,7 @@ export class ChatPanel {
 			display: flex; flex-direction: column; gap: 6px;
 			max-width: min(820px, 100%);
 			width: 100%;
+			min-width: 0;
 			margin: 0 auto;
 			padding: 0 var(--pad);
 			animation: msg-in 0.18s ease-out;
@@ -945,6 +946,8 @@ export class ChatPanel {
 		.msg-actions button.done { color: var(--mint); }
 		.msg .body {
 			word-wrap: break-word;
+			min-width: 0;
+			max-width: 100%;
 			padding: 10px 14px;
 			border-radius: var(--radius-lg);
 			line-height: 1.6;
@@ -1041,7 +1044,8 @@ export class ChatPanel {
 			background: rgba(0,0,0,0.30);
 			border: 1px solid var(--border);
 			border-radius: var(--radius);
-			overflow: hidden;
+			overflow: auto;
+			max-width: 100%;
 		}
 		html[data-theme="light"] .msg.assistant .body pre { background: rgba(15,23,42,0.04); }
 		.msg.assistant .body pre > .codeblock-header {
@@ -1091,6 +1095,7 @@ export class ChatPanel {
 			border-radius: 0;
 			white-space: pre;
 			overflow-x: auto;
+			min-width: max-content;
 			font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 			font-size: 12.5px;
 			line-height: 1.55;
@@ -3561,21 +3566,24 @@ export class ChatPanel {
 
 			async function openSession(path) {
 				try {
-					await window.gaApi.restoreSession(path);
 					activeSessionPath = path;
 					Array.from(historyListEl.querySelectorAll('.dropdown-row')).forEach(function (el) {
 						el.classList.toggle('active', el.dataset.path === path);
 					});
-					// Clear transcript & load history.
 					logEl.innerHTML = '';
 					const messages = await window.gaApi.getSessionHistory(path);
 					(messages || []).forEach(function (m) {
 						if (!m || !m.role || !m.content) { return; }
 						appendHistoryMessage(m.role, m.content);
 					});
+					try { await window.gaApi.restoreSession(path); } catch (_) {}
 					refreshWelcome();
 					refreshJumpButton();
+					scrollToBottom(true);
 				} catch (e) {
+					logEl.innerHTML = '';
+					appendHistoryMessage('system', 'Failed to open session: ' + (e.message || e));
+					refreshWelcome();
 					vscode.postMessage({ kind: 'info', text: 'Failed to open session: ' + (e.message || e) });
 				}
 			}
@@ -3598,6 +3606,14 @@ export class ChatPanel {
 					logEl.appendChild(el);
 					try { renderAssistantBody(body, String(content), true); }
 					catch (e) { body.textContent = String(content); }
+				} else {
+					const el = document.createElement('div');
+					el.className = 'msg system';
+					const body = document.createElement('div');
+					body.className = 'body';
+					body.textContent = String(content);
+					el.appendChild(body);
+					logEl.appendChild(el);
 				}
 			}
 
