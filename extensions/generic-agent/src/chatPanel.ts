@@ -42,12 +42,14 @@ export class ChatPanel {
 
 	private readonly panel: vscode.WebviewPanel;
 	private readonly httpPort: number;
+	private botMgr?: BotProcessManager;
 	private disposables: vscode.Disposable[] = [];
 
 	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number, botMgr?: BotProcessManager): void {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
 
 		if (ChatPanel.current) {
+			ChatPanel.current.botMgr = botMgr;
 			ChatPanel.current.panel.reveal(column);
 			return;
 		}
@@ -66,9 +68,10 @@ export class ChatPanel {
 		ChatPanel.current = new ChatPanel(panel, client, httpPort, botMgr);
 	}
 
-	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number, private readonly botMgr?: BotProcessManager) {
+	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number, botMgr?: BotProcessManager) {
 		this.httpPort = httpPort;
 		this.panel = panel;
+		this.botMgr = botMgr;
 		this.panel.webview.html = this.html();
 
 		// ─── webview → extension ─────────────────────────────────────────
@@ -149,7 +152,7 @@ export class ChatPanel {
 					);
 					break;
 				case 'bot_status':
-					this.post({ kind: 'bot_status', bots: this.botMgr?.status() || [] });
+					this.post({ kind: 'bot_status', bots: this.botMgr?.status() || [], available: !!this.botMgr });
 					break;
 				case 'bot_start':
 					void this.handleBotStart(String((msg as { bot?: unknown }).bot || ''));
@@ -1693,6 +1696,9 @@ export class ChatPanel {
 		</button>
 		<button class="toolbar-icon" id="btn-skills" data-i18n-title="btn.skills" title="Skills &amp; SOPs" aria-label="Skills">
 			<svg viewBox="0 0 16 16"><path d="M8 1.5l1.7 4.4 4.6.4-3.5 3 1.1 4.5L8 11.4 4.1 13.8l1.1-4.5-3.5-3 4.6-.4z"/></svg>
+		</button>
+		<button class="toolbar-icon" id="btn-bots" title="机器人管理" aria-label="机器人管理">
+			<svg viewBox="0 0 16 16"><rect x="3" y="5" width="10" height="7" rx="2"/><path d="M8 5V2.8M5.5 2.8h5M5.5 8h.1M10.4 8h.1M6.2 11h3.6"/></svg>
 		</button>
 		<button class="toolbar-icon" id="btn-settings" data-i18n-title="btn.settings" title="Settings" aria-label="Settings">
 			<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2"/><path d="M13 8a5 5 0 0 0-.1-1l1.4-1.1-1.5-2.6-1.7.6a5 5 0 0 0-1.7-1L9 1H7l-.4 1.9a5 5 0 0 0-1.7 1l-1.7-.6L1.7 5.9 3.1 7a5 5 0 0 0 0 2L1.7 10.1l1.5 2.6 1.7-.6a5 5 0 0 0 1.7 1L7 15h2l.4-1.9a5 5 0 0 0 1.7-1l1.7.6 1.5-2.6L12.9 9c.1-.3.1-.6.1-1z"/></svg>
@@ -3432,6 +3438,7 @@ export class ChatPanel {
 			const newChatBtn = document.getElementById('btn-new-chat');
 			const historyBtn = document.getElementById('btn-history');
 			const skillsBtn = document.getElementById('btn-skills');
+			const botsBtn = document.getElementById('btn-bots');
 			const settingsBtn = document.getElementById('btn-settings');
 			const panelHistory = document.getElementById('panel-history');
 			const panelSkills = document.getElementById('panel-skills');
@@ -3470,7 +3477,7 @@ export class ChatPanel {
 			const allPanels = [panelHistory, panelSkills, panelSettings];
 			function closeAllPanels() {
 				allPanels.forEach(function (p) { p.classList.remove('show'); });
-				[historyBtn, skillsBtn, settingsBtn].forEach(function (b) { b.classList.remove('active'); });
+				[historyBtn, skillsBtn, botsBtn, settingsBtn].forEach(function (b) { b.classList.remove('active'); });
 			}
 			function togglePanel(panel, btn, onOpen) {
 				const willOpen = !panel.classList.contains('show');
@@ -3483,7 +3490,7 @@ export class ChatPanel {
 			}
 			document.addEventListener('click', function (e) {
 				const inPanel = e.target.closest('.dropdown-panel');
-				const inTrigger = e.target.closest('#btn-history, #btn-skills, #btn-settings');
+				const inTrigger = e.target.closest('#btn-history, #btn-skills, #btn-bots, #btn-settings');
 				if (!inPanel && !inTrigger) { closeAllPanels(); }
 			});
 			document.addEventListener('keydown', function (e) {
@@ -3504,16 +3511,16 @@ export class ChatPanel {
 					setTimeout(function () { skillsSearchEl.focus(); }, 0);
 				});
 			});
+			botsBtn.addEventListener('click', function (e) {
+				e.stopPropagation();
+				togglePanel(panelSettings, botsBtn, function () {
+					loadSettings();
+					vscode.postMessage({ kind: 'bot_status' });
+				});
+			});
 			settingsBtn.addEventListener('click', function (e) {
 				e.stopPropagation();
-				if (e.altKey || e.shiftKey) {
-					vscode.postMessage({ kind: 'open_settings' });
-				} else {
-					togglePanel(panelSettings, settingsBtn, function () {
-						loadSettings();
-						vscode.postMessage({ kind: 'bot_status' });
-					});
-				}
+				vscode.postMessage({ kind: 'open_settings' });
 			});
 
 			// ── Welcome card actions ──────────────────────────────────────
@@ -3859,6 +3866,10 @@ export class ChatPanel {
 				const host = document.getElementById('bot-list');
 				if (!host) { return; }
 				host.innerHTML = '';
+				if (!bots.length) {
+					host.innerHTML = '<div class="dropdown-empty">机器人管理器未连接，请重载窗口后重试。</div>';
+					return;
+				}
 				bots.forEach(function (bot) {
 					const card = document.createElement('div');
 					card.className = 'bot-card' + (bot.running ? ' running' : '') + (!bot.configured ? ' missing' : '');
