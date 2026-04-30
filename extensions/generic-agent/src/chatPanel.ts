@@ -1024,6 +1024,55 @@ export class ChatPanel {
 		.skill-row .row-action:hover { background: var(--bg-glass-hi); color: var(--fg-strong); }
 		.row-stars { color: #f5b342; font-size: 11px; margin-left: 6px; }
 
+		/* Marketplace cards (sophub style) */
+		.market-card { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); margin: 6px 0; background: var(--bg-glass); cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+		.market-card:hover { background: var(--bg-glass-hi); border-color: var(--border-strong); }
+		.market-card-head { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+		.market-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#3b82f6,#6366f1); }
+		.market-badge.official { background: linear-gradient(135deg,#ef4444,#f97316); }
+		.market-title { font-size: 13px; font-weight: 650; color: var(--fg-strong); flex: 1 1 auto; line-height: 1.4; }
+		.market-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--fg-muted); }
+		.market-meta .stars { color: #f5b342; }
+		.market-preview { font-size: 12px; color: var(--fg-muted); line-height: 1.5; max-height: 48px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; border-top: 1px dashed var(--border); padding-top: 6px; }
+
+		/* Risk-confirm modal (upload warning) */
+		.risk-modal-backdrop { position: fixed; inset: 0; z-index: 110; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; }
+		.risk-modal-backdrop.show { display: flex; }
+		.risk-modal { width: min(520px, 92vw); background: rgba(20,20,28,0.98); color: var(--fg); border: 1px solid #ef4444; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.55); padding: 18px 20px; }
+		html[data-theme="light"] .risk-modal { background: rgba(255,255,255,0.99); }
+		.risk-modal h3 { margin: 0 0 8px; font-size: 15px; color: #ef4444; display:flex; align-items:center; gap:6px; }
+		.risk-modal ul { margin: 8px 0 12px; padding-left: 20px; line-height: 1.6; font-size: 12px; }
+		.risk-modal .target { padding: 6px 8px; background: var(--bg-glass); border-radius: 6px; font-size: 12px; margin: 6px 0 10px; word-break: break-all; }
+		.risk-modal label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+		.risk-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+		.risk-modal-foot button { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-glass-hi); color: var(--fg); cursor: pointer; font-size: 12px; }
+		.risk-modal-foot button.danger { background: #ef4444; border-color: #ef4444; color: #fff; }
+		.risk-modal-foot button.danger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+		/* Config editor modal */
+		.config-modal-backdrop { position: fixed; inset: 0; z-index: 105; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; padding: 24px; }
+		.config-modal-backdrop.show { display: flex; }
+		.config-modal { width: min(880px, 96vw); height: min(740px, 90vh); background: rgba(20,20,28,0.98); color: var(--fg); border: 1px solid var(--border-strong); border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+		html[data-theme="light"] .config-modal { background: rgba(255,255,255,0.99); }
+		.config-modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+		.config-modal-title { flex: 1 1 auto; font-size: 14px; font-weight: 650; color: var(--fg-strong); }
+		.config-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px; }
+		.config-modal-foot { padding: 10px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+		.config-banner { padding: 10px 12px; border-radius: 10px; background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(239,68,68,0.18)); border: 1px solid rgba(245,158,11,0.45); color: var(--fg); font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+		.cfg-session { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg-glass); }
+		.cfg-session-head { display:flex; gap:8px; align-items:center; margin-bottom: 8px; }
+		.cfg-grid { display: grid; grid-template-columns: 110px 1fr; gap: 6px 10px; align-items: center; }
+		.cfg-grid label { font-size: 11px; color: var(--fg-muted); }
+		.cfg-grid input, .cfg-grid select, .cfg-grid textarea { width: 100%; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 12px; font-family: inherit; }
+		.cfg-grid .row-inline { display: flex; gap: 6px; }
+		.cfg-grid .row-inline button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-glass-hi); color: var(--fg); cursor: pointer; font-size: 11px; }
+		.cfg-section-title { font-size: 12px; font-weight: 600; color: var(--fg-strong); margin: 14px 0 6px; }
+		.cfg-add-btn { padding: 6px 12px; border-radius: 8px; border: 1px dashed var(--border-strong); background: transparent; color: var(--fg-muted); cursor: pointer; font-size: 12px; width: 100%; }
+		.cfg-add-btn:hover { background: var(--bg-glass); color: var(--fg); }
+		.cfg-status { font-size: 11px; color: var(--fg-muted); }
+		.cfg-banner-prompt { padding: 10px 14px; border-radius: 10px; margin: 10px 16px; background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(239,68,68,0.10)); border: 1px solid rgba(245,158,11,0.4); display: flex; align-items: center; gap: 10px; font-size: 12px; }
+		.cfg-banner-prompt button { padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--brand-grad, #6366f1); color: #fff; cursor: pointer; font-size: 11px; font-weight: 600; }
+
 		/* ── Welcome empty state ─────────────────────────────────────── */
 		.welcome {
 			flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -2012,8 +2061,9 @@ export class ChatPanel {
 			<div class="dropdown-body" id="settings-body">
 				<div class="dropdown-empty">Loading…</div>
 			</div>
-			<div class="dropdown-foot">
-				<button id="settings-reload">Reload LLM Config</button>
+			<div class="dropdown-foot" style="display:flex;gap:6px;">
+				<button id="settings-config" class="primary" style="background:var(--brand-grad);color:#fff;border-color:transparent;">打开配置编辑器</button>
+				<button id="settings-reload">一键载入</button>
 			</div>
 		</div>
 		<!-- Overflow / "more actions" menu -->
@@ -2044,6 +2094,14 @@ export class ChatPanel {
 			</div>
 		</div>
 	</header>
+
+	<!-- Missing-config banner (shown when no LLM is configured) -->
+	<div class="cfg-banner-prompt" id="cfg-prompt" hidden>
+		<span style="font-size:16px;">⚠</span>
+		<span style="flex:1 1 auto;">尚未检测到 LLM 配置，无法对话。请先配置 API Key。</span>
+		<button id="cfg-prompt-open">打开配置</button>
+		<button id="cfg-prompt-dismiss" style="background:transparent;color:var(--fg-muted);border-color:var(--border);">稍后</button>
+	</div>
 
 	<!-- Autonomous strip (visible when autonomous mode is on or running) -->
 	<div class="auto-strip" id="auto-strip" hidden>
@@ -2140,6 +2198,48 @@ export class ChatPanel {
 			<span>📎 Drop to attach</span>
 		</div>
 	</footer>
+	<!-- Upload-risk confirmation modal (shown before pushing local SOP to marketplace) -->
+	<div class="risk-modal-backdrop" id="risk-modal" role="dialog" aria-modal="true" aria-label="Upload Confirmation">
+		<div class="risk-modal">
+			<h3>⚠ 上传到 Sophub 市场</h3>
+			<div class="cfg-status">即将公开发布以下 SOP：</div>
+			<div class="target" id="risk-modal-target">—</div>
+			<div class="cfg-status"><b>请逐条确认</b>，发布后内容将公开可见，可能被搜索引擎索引：</div>
+			<ul>
+				<li>不含 API Key、密码、证书等任何凭据</li>
+				<li>不含个人信息（手机号、邮箱、身份证、地址）</li>
+				<li>不含商业机密或他人未授权内容</li>
+				<li>不违反法律法规、平台政策（无武器化代码、垃圾信息）</li>
+			</ul>
+			<label><input type="checkbox" id="risk-modal-agree"> 我已阅读 <a href="https://fudankw.cn/sophub/?source=official" target="_blank" rel="noopener">Sophub 政策</a> 并对内容负全责</label>
+			<div class="risk-modal-foot">
+				<button id="risk-modal-cancel">取消</button>
+				<button id="risk-modal-confirm" class="danger" disabled>确认上传</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- LLM config editor modal -->
+	<div class="config-modal-backdrop" id="config-modal" role="dialog" aria-modal="true" aria-label="LLM 配置">
+		<div class="config-modal">
+			<div class="config-modal-head">
+				<div class="config-modal-title">⚙ LLM 配置编辑器</div>
+				<button class="sop-modal-close" id="config-modal-close" title="Close" aria-label="Close">×</button>
+			</div>
+			<div class="config-modal-body" id="config-modal-body"></div>
+			<div class="config-modal-foot">
+				<div class="left">
+					<span class="cfg-status" id="config-status">未加载</span>
+				</div>
+				<div style="display:flex; gap:8px;">
+					<button id="config-modal-cancel">关闭</button>
+					<button id="config-modal-save">保存</button>
+					<button id="config-modal-save-reload" class="primary" style="background:var(--brand-grad);color:#fff;border-color:transparent;">保存并一键载入</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
 	<div class="sop-modal-backdrop" id="sop-modal" role="dialog" aria-modal="true" aria-label="SOP Preview">
 		<div class="sop-modal">
 			<div class="sop-modal-head">
@@ -4176,6 +4276,19 @@ export class ChatPanel {
 				});
 			}
 
+			function timeAgo(iso) {
+				if (!iso) { return ''; }
+				const d = new Date(iso);
+				if (isNaN(d.getTime())) { return ''; }
+				const s = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000));
+				if (s < 60) { return s + ' 秒前'; }
+				if (s < 3600) { return Math.floor(s / 60) + ' 分钟前'; }
+				if (s < 86400) { return Math.floor(s / 3600) + ' 小时前'; }
+				if (s < 86400 * 30) { return Math.floor(s / 86400) + ' 天前'; }
+				if (s < 86400 * 365) { return Math.floor(s / 86400 / 30) + ' 个月前'; }
+				return Math.floor(s / 86400 / 365) + ' 年前';
+			}
+
 			function renderMarketList() {
 				if (!marketResults.length) {
 					marketListEl.innerHTML = '<div class="dropdown-empty">无结果</div>';
@@ -4187,25 +4300,75 @@ export class ChatPanel {
 				h.textContent = '市场 SOP (' + marketResults.length + ')';
 				marketListEl.appendChild(h);
 				marketResults.forEach(function (it) {
-					const row = document.createElement('div');
-					row.className = 'dropdown-row skill-row';
-					const t = document.createElement('div');
-					t.className = 'row-title';
-					t.textContent = it.title || ('SOP #' + it.id);
-					if (typeof it.avg_stars === 'number' && it.avg_stars > 0) {
+					const card = document.createElement('div');
+					card.className = 'market-card';
+
+					const head = document.createElement('div');
+					head.className = 'market-card-head';
+					const isOfficial = (it.author_type === 'official') || (String(it.author_name || it.author || '').toLowerCase() === 'sophub') || it.is_official;
+					if (isOfficial) {
+						const b = document.createElement('span');
+						b.className = 'market-badge official';
+						b.textContent = '官方';
+						head.appendChild(b);
+					} else if (it.author_type) {
+						const b = document.createElement('span');
+						b.className = 'market-badge';
+						b.textContent = it.author_type === 'agent' ? 'Agent' : it.author_type;
+						head.appendChild(b);
+					}
+					const ttl = document.createElement('div');
+					ttl.className = 'market-title';
+					ttl.textContent = it.title || ('SOP #' + it.id);
+					head.appendChild(ttl);
+					card.appendChild(head);
+
+					const meta = document.createElement('div');
+					meta.className = 'market-meta';
+					const author = it.author_name || it.author || (it.author_type === 'agent' ? 'agent' : '匿名');
+					const a = document.createElement('span');
+					a.textContent = '@' + author;
+					meta.appendChild(a);
+					const stars = (typeof it.avg_stars === 'number') ? it.avg_stars : (typeof it.average_stars === 'number' ? it.average_stars : null);
+					if (stars && stars > 0) {
 						const s = document.createElement('span');
-						s.className = 'row-stars';
-						s.textContent = '★ ' + it.avg_stars.toFixed(1);
-						t.appendChild(s);
+						s.className = 'stars';
+						s.textContent = '★ ' + Number(stars).toFixed(1);
+						meta.appendChild(s);
 					}
-					row.appendChild(t);
-					const meta = it.author_name || it.author || it.summary || it.preview;
-					if (meta) {
-						const d = document.createElement('div');
-						d.className = 'row-brief';
-						d.textContent = String(meta).slice(0, 140);
-						row.appendChild(d);
+					const reviews = it.review_count || it.reviews;
+					if (typeof reviews === 'number' && reviews > 0) {
+						const r = document.createElement('span');
+						r.textContent = '💬 ' + reviews;
+						meta.appendChild(r);
 					}
+					const views = it.view_count || it.views;
+					if (typeof views === 'number' && views > 0) {
+						const v = document.createElement('span');
+						v.textContent = '👁 ' + views;
+						meta.appendChild(v);
+					}
+					const ago = timeAgo(it.updated_at || it.created_at);
+					if (ago) {
+						const t = document.createElement('span');
+						t.textContent = ago;
+						meta.appendChild(t);
+					}
+					if (it.file_type && it.file_type !== 'markdown') {
+						const ft = document.createElement('span');
+						ft.textContent = it.file_type;
+						meta.appendChild(ft);
+					}
+					card.appendChild(meta);
+
+					const previewText = it.preview || it.summary || it.content_preview || '';
+					if (previewText) {
+						const p = document.createElement('div');
+						p.className = 'market-preview';
+						p.textContent = String(previewText).replace(/\\s+/g, ' ').trim();
+						card.appendChild(p);
+					}
+
 					const acts = document.createElement('div');
 					acts.className = 'row-actions';
 					const dl = document.createElement('button');
@@ -4216,12 +4379,13 @@ export class ChatPanel {
 						downloadMarketSop(it);
 					});
 					acts.appendChild(dl);
-					row.appendChild(acts);
-					row.addEventListener('click', function () {
+					card.appendChild(acts);
+
+					card.addEventListener('click', function () {
 						openSopModal(it, 'market');
 						closeAllPanels();
 					});
-					marketListEl.appendChild(row);
+					marketListEl.appendChild(card);
 				});
 			}
 
@@ -4240,15 +4404,51 @@ export class ChatPanel {
 				}
 			}
 
-			async function uploadLocalSop(it) {
-				if (!confirm('上传 "' + (it.title || it.name) + '" 到 Sophub 市场？\\n请确认内容不含密钥/隐私/违法信息。')) { return; }
+			const riskModalEl = document.getElementById('risk-modal');
+			const riskModalTargetEl = document.getElementById('risk-modal-target');
+			const riskModalAgreeEl = document.getElementById('risk-modal-agree');
+			const riskModalConfirmEl = document.getElementById('risk-modal-confirm');
+			const riskModalCancelEl = document.getElementById('risk-modal-cancel');
+			let _riskPendingItem = null;
+
+			function closeRiskModal() {
+				_riskPendingItem = null;
+				riskModalAgreeEl.checked = false;
+				riskModalConfirmEl.disabled = true;
+				riskModalEl.classList.remove('show');
+			}
+			riskModalAgreeEl.addEventListener('change', function () {
+				riskModalConfirmEl.disabled = !riskModalAgreeEl.checked;
+			});
+			riskModalCancelEl.addEventListener('click', closeRiskModal);
+			riskModalEl.addEventListener('click', function (e) {
+				if (e.target === riskModalEl) { closeRiskModal(); }
+			});
+			riskModalConfirmEl.addEventListener('click', async function () {
+				const it = _riskPendingItem;
+				if (!it || !riskModalAgreeEl.checked) { return; }
+				riskModalConfirmEl.disabled = true;
+				riskModalConfirmEl.textContent = '上传中…';
 				try {
 					const r = await window.gaApi.sophub('upload', { sopName: it.name, title: it.title || it.name });
+					closeRiskModal();
 					alert('上传成功：' + (r && (r.title || r.id) || ''));
 					refreshSophubKeyStatus(true);
 				} catch (e) {
 					alert('上传失败：' + (e.message || e));
+				} finally {
+					riskModalConfirmEl.disabled = false;
+					riskModalConfirmEl.textContent = '确认上传';
 				}
+			});
+
+			function uploadLocalSop(it) {
+				_riskPendingItem = it;
+				riskModalTargetEl.textContent = (it.title || it.name || '(unnamed)');
+				riskModalAgreeEl.checked = false;
+				riskModalConfirmEl.disabled = true;
+				riskModalConfirmEl.textContent = '确认上传';
+				riskModalEl.classList.add('show');
 			}
 
 			async function downloadMarketSop(it, overwrite) {
@@ -4479,6 +4679,7 @@ export class ChatPanel {
 				try {
 					const r = await window.gaApi.reloadLLMConfig();
 					settingsReloadBtn.textContent = (r && r.error) ? ('Error: ' + r.error) : 'Reloaded ✓';
+					checkLlmConfigured();
 				} catch (e) {
 					settingsReloadBtn.textContent = 'Failed';
 				}
@@ -4488,6 +4689,375 @@ export class ChatPanel {
 					loadSettings();
 				}, 1500);
 			});
+
+			// ── LLM Config editor ─────────────────────────────────────────
+			const configModalEl = document.getElementById('config-modal');
+			const configModalBodyEl = document.getElementById('config-modal-body');
+			const configModalCloseEl = document.getElementById('config-modal-close');
+			const configModalCancelEl = document.getElementById('config-modal-cancel');
+			const configModalSaveEl = document.getElementById('config-modal-save');
+			const configModalSaveReloadEl = document.getElementById('config-modal-save-reload');
+			const configStatusEl = document.getElementById('config-status');
+			const settingsConfigBtn = document.getElementById('settings-config');
+			const cfgPromptEl = document.getElementById('cfg-prompt');
+			const cfgPromptOpenEl = document.getElementById('cfg-prompt-open');
+			const cfgPromptDismissEl = document.getElementById('cfg-prompt-dismiss');
+
+			let configState = { sessions: [], mixin: null, readonly: false };
+
+			const SESSION_TYPES = [
+				{ value: 'native_claude', label: 'Native Claude (Anthropic 协议 + 原生工具)' },
+				{ value: 'native_oai', label: 'Native OAI (OpenAI 协议 + 原生工具)' },
+				{ value: 'claude', label: 'Claude (文本协议工具，deprecated)' },
+				{ value: 'oai', label: 'OAI (文本协议工具，deprecated)' },
+			];
+			const ADVANCED_FIELDS = [
+				{ key: 'reasoning_effort', label: 'reasoning_effort', placeholder: 'none|minimal|low|medium|high|xhigh' },
+				{ key: 'thinking_type', label: 'thinking_type', placeholder: 'adaptive|enabled|disabled' },
+				{ key: 'thinking_budget_tokens', label: 'thinking_budget_tokens', placeholder: 'int', type: 'number' },
+				{ key: 'fake_cc_system_prompt', label: 'fake_cc_system_prompt', type: 'checkbox' },
+				{ key: 'temperature', label: 'temperature', placeholder: 'float (default 1.0)', type: 'number', step: '0.1' },
+				{ key: 'max_tokens', label: 'max_tokens', placeholder: 'int (default 8192)', type: 'number' },
+				{ key: 'context_win', label: 'context_win', placeholder: 'int', type: 'number' },
+				{ key: 'max_retries', label: 'max_retries', placeholder: 'int', type: 'number' },
+				{ key: 'connect_timeout', label: 'connect_timeout', placeholder: 'sec', type: 'number' },
+				{ key: 'read_timeout', label: 'read_timeout', placeholder: 'sec', type: 'number' },
+				{ key: 'api_mode', label: 'api_mode', placeholder: 'chat_completions|responses' },
+				{ key: 'proxy', label: 'proxy', placeholder: 'http://127.0.0.1:2082' },
+				{ key: 'stream', label: 'stream', type: 'checkbox' },
+			];
+
+			function maskKey(s) {
+				const v = String(s || '');
+				if (v.length <= 8) { return '••••'; }
+				return v.slice(0, 4) + '••••' + v.slice(-4);
+			}
+
+			function buildSessionCard(idx) {
+				const s = configState.sessions[idx] || {};
+				const wrap = document.createElement('div');
+				wrap.className = 'cfg-session';
+				wrap.dataset.idx = String(idx);
+
+				const head = document.createElement('div');
+				head.className = 'cfg-session-head';
+				const typeSel = document.createElement('select');
+				SESSION_TYPES.forEach(function (t) {
+					const o = document.createElement('option');
+					o.value = t.value; o.textContent = t.label;
+					if ((s._type || 'native_oai') === t.value) { o.selected = true; }
+					typeSel.appendChild(o);
+				});
+				typeSel.addEventListener('change', function () {
+					configState.sessions[idx]._type = typeSel.value;
+				});
+				head.appendChild(typeSel);
+				const nameInput = document.createElement('input');
+				nameInput.placeholder = '内部 key（如 native_oai_config1）';
+				nameInput.value = s._key || '';
+				nameInput.style.flex = '1 1 auto';
+				nameInput.addEventListener('input', function () {
+					configState.sessions[idx]._key = nameInput.value.trim();
+				});
+				head.appendChild(nameInput);
+				const delBtn = document.createElement('button');
+				delBtn.className = 'row-action';
+				delBtn.textContent = '删除';
+				delBtn.addEventListener('click', function () {
+					configState.sessions.splice(idx, 1);
+					renderConfigEditor();
+				});
+				head.appendChild(delBtn);
+				wrap.appendChild(head);
+
+				const grid = document.createElement('div');
+				grid.className = 'cfg-grid';
+				function addField(label, key, opts) {
+					const lab = document.createElement('label');
+					lab.textContent = label;
+					grid.appendChild(lab);
+					if (opts && opts.inline) {
+						grid.appendChild(opts.inline);
+					} else {
+						const inp = document.createElement('input');
+						inp.type = (opts && opts.type) || 'text';
+						if (opts && opts.placeholder) { inp.placeholder = opts.placeholder; }
+						if (opts && opts.step) { inp.step = opts.step; }
+						const v = s[key];
+						if (opts && opts.type === 'checkbox') {
+							inp.checked = !!v;
+							inp.addEventListener('change', function () { configState.sessions[idx][key] = inp.checked; });
+						} else {
+							inp.value = (v === undefined || v === null) ? '' : String(v);
+							inp.addEventListener('input', function () {
+								let val = inp.value;
+								if (opts && opts.type === 'number') {
+									if (val === '') { delete configState.sessions[idx][key]; return; }
+									const n = Number(val);
+									configState.sessions[idx][key] = isNaN(n) ? val : n;
+								} else {
+									configState.sessions[idx][key] = val;
+								}
+							});
+						}
+						grid.appendChild(inp);
+					}
+				}
+				const nameRow = document.createElement('input');
+				nameRow.placeholder = 'name (展示用，可与 key 一致)';
+				nameRow.value = s.name || '';
+				nameRow.addEventListener('input', function () { configState.sessions[idx].name = nameRow.value; });
+				addField('name', 'name', { inline: nameRow });
+
+				// API key with show/hide
+				const keyWrap = document.createElement('div');
+				keyWrap.className = 'row-inline';
+				const keyInput = document.createElement('input');
+				keyInput.type = 'password';
+				keyInput.placeholder = 'sk-...';
+				keyInput.value = s.apikey || '';
+				keyInput.style.flex = '1 1 auto';
+				keyInput.addEventListener('input', function () { configState.sessions[idx].apikey = keyInput.value; });
+				keyWrap.appendChild(keyInput);
+				const eyeBtn = document.createElement('button');
+				eyeBtn.type = 'button';
+				eyeBtn.textContent = '显示';
+				eyeBtn.addEventListener('click', function () {
+					if (keyInput.type === 'password') { keyInput.type = 'text'; eyeBtn.textContent = '隐藏'; }
+					else { keyInput.type = 'password'; eyeBtn.textContent = '显示'; }
+				});
+				keyWrap.appendChild(eyeBtn);
+				addField('apikey', 'apikey', { inline: keyWrap });
+
+				addField('apibase', 'apibase', { placeholder: 'https://api.openai.com/v1' });
+
+				// Model with test/list button
+				const modelWrap = document.createElement('div');
+				modelWrap.className = 'row-inline';
+				const modelInput = document.createElement('input');
+				modelInput.placeholder = 'gpt-4o / claude-opus-4-7 ...';
+				modelInput.value = s.model || '';
+				modelInput.style.flex = '1 1 auto';
+				modelInput.addEventListener('input', function () { configState.sessions[idx].model = modelInput.value; });
+				modelWrap.appendChild(modelInput);
+				const testBtn = document.createElement('button');
+				testBtn.type = 'button';
+				testBtn.textContent = '测试 / 列模型';
+				testBtn.addEventListener('click', async function () {
+					testBtn.disabled = true;
+					testBtn.textContent = '测试中…';
+					try {
+						const r = await window.gaApi.listModels(s.apikey || '', s.apibase || '', s.proxy || '');
+						const models = (r && r.models) || [];
+						if (!models.length) {
+							alert('连通成功，但未返回模型列表');
+						} else {
+							const pick = prompt('连通成功，请粘贴或选择模型：\\n\\n' + models.slice(0, 30).join('\\n'), modelInput.value || models[0]);
+							if (pick) { modelInput.value = pick; configState.sessions[idx].model = pick; }
+						}
+					} catch (e) {
+						alert('测试失败：' + (e.message || e));
+					}
+					testBtn.disabled = false;
+					testBtn.textContent = '测试 / 列模型';
+				});
+				modelWrap.appendChild(testBtn);
+				addField('model', 'model', { inline: modelWrap });
+
+				// Advanced (collapsed by default)
+				const advWrap = document.createElement('details');
+				advWrap.style.gridColumn = '1 / -1';
+				advWrap.style.marginTop = '4px';
+				const adv = document.createElement('summary');
+				adv.textContent = '高级选项';
+				adv.style.cursor = 'pointer';
+				adv.style.fontSize = '11px';
+				adv.style.color = 'var(--fg-muted)';
+				advWrap.appendChild(adv);
+				const advGrid = document.createElement('div');
+				advGrid.className = 'cfg-grid';
+				advGrid.style.marginTop = '6px';
+				ADVANCED_FIELDS.forEach(function (f) {
+					const lab = document.createElement('label');
+					lab.textContent = f.label;
+					advGrid.appendChild(lab);
+					const inp = document.createElement('input');
+					inp.type = f.type || 'text';
+					if (f.placeholder) { inp.placeholder = f.placeholder; }
+					if (f.step) { inp.step = f.step; }
+					const v = s[f.key];
+					if (f.type === 'checkbox') {
+						inp.checked = !!v;
+						inp.addEventListener('change', function () { configState.sessions[idx][f.key] = inp.checked; });
+					} else {
+						inp.value = (v === undefined || v === null) ? '' : String(v);
+						inp.addEventListener('input', function () {
+							const val = inp.value;
+							if (f.type === 'number') {
+								if (val === '') { delete configState.sessions[idx][f.key]; return; }
+								const n = Number(val);
+								configState.sessions[idx][f.key] = isNaN(n) ? val : n;
+							} else if (val === '') {
+								delete configState.sessions[idx][f.key];
+							} else {
+								configState.sessions[idx][f.key] = val;
+							}
+						});
+					}
+					advGrid.appendChild(inp);
+				});
+				advWrap.appendChild(advGrid);
+
+				wrap.appendChild(grid);
+				wrap.appendChild(advWrap);
+				return wrap;
+			}
+
+			function renderConfigEditor() {
+				configModalBodyEl.innerHTML = '';
+				const banner = document.createElement('div');
+				banner.className = 'config-banner';
+				banner.innerHTML = '🔒 <b>所有 API Key 仅保存在本机 <code>mykey.json</code></b>，不会上传或外发。建议为本工具单独申请额度受限的 Key，并定期轮换。' +
+					(configState.readonly ? '<br><b>⚠ 当前检测到 mykey.py 同时存在</b>，保存到 mykey.json 后建议在编辑器中删除或重命名 mykey.py 以避免冲突。' : '');
+				configModalBodyEl.appendChild(banner);
+
+				const sec = document.createElement('div');
+				sec.className = 'cfg-section-title';
+				sec.textContent = 'LLM Sessions';
+				configModalBodyEl.appendChild(sec);
+
+				if (!configState.sessions.length) {
+					const empty = document.createElement('div');
+					empty.className = 'dropdown-empty';
+					empty.textContent = '尚未配置任何 LLM。点击下方按钮添加。';
+					configModalBodyEl.appendChild(empty);
+				} else {
+					configState.sessions.forEach(function (_, idx) {
+						configModalBodyEl.appendChild(buildSessionCard(idx));
+					});
+				}
+
+				const addBtn = document.createElement('button');
+				addBtn.className = 'cfg-add-btn';
+				addBtn.textContent = '+ 添加 Session';
+				addBtn.addEventListener('click', function () {
+					configState.sessions.push({
+						_type: 'native_oai',
+						_key: 'native_oai_config' + (configState.sessions.length + 1),
+						name: '',
+						apikey: '',
+						apibase: 'https://api.openai.com/v1',
+						model: '',
+					});
+					renderConfigEditor();
+				});
+				configModalBodyEl.appendChild(addBtn);
+
+				// Mixin section
+				const msec = document.createElement('div');
+				msec.className = 'cfg-section-title';
+				msec.textContent = 'Mixin 故障转移（可选）';
+				configModalBodyEl.appendChild(msec);
+
+				const mixWrap = document.createElement('div');
+				mixWrap.className = 'cfg-session';
+				const mg = document.createElement('div');
+				mg.className = 'cfg-grid';
+				const mlabel = document.createElement('label');
+				mlabel.textContent = 'llm_nos';
+				mg.appendChild(mlabel);
+				const mInput = document.createElement('input');
+				mInput.placeholder = '逗号分隔 name 列表，如 gpt-native, cc-relay-1';
+				const cur = configState.mixin && configState.mixin.llm_nos;
+				mInput.value = Array.isArray(cur) ? cur.join(', ') : (cur || '');
+				mInput.addEventListener('input', function () {
+					if (!configState.mixin) { configState.mixin = { _key: 'mixin_config' }; }
+					const arr = mInput.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+					configState.mixin.llm_nos = arr;
+				});
+				mg.appendChild(mInput);
+				mixWrap.appendChild(mg);
+				configModalBodyEl.appendChild(mixWrap);
+			}
+
+			async function openConfigEditor() {
+				configStatusEl.textContent = '加载中…';
+				configModalEl.classList.add('show');
+				configModalBodyEl.innerHTML = '<div class="dropdown-empty">加载中…</div>';
+				try {
+					const r = await window.gaApi.getLLMConfig();
+					configState = {
+						sessions: ((r && r.sessions) || []).map(function (s) { return Object.assign({}, s); }),
+						mixin: (r && r.mixin) ? Object.assign({}, r.mixin) : null,
+						readonly: !!(r && r.readonly),
+					};
+					configStatusEl.textContent = '已加载 ' + configState.sessions.length + ' 个会话';
+					renderConfigEditor();
+				} catch (e) {
+					configModalBodyEl.innerHTML = '<div class="dropdown-empty">加载失败：' + escapeHtml(e.message || String(e)) + '</div>';
+					configStatusEl.textContent = '加载失败';
+				}
+			}
+
+			function closeConfigEditor() { configModalEl.classList.remove('show'); }
+
+			async function saveConfig(reloadAfter) {
+				configStatusEl.textContent = '保存中…';
+				try {
+					const body = {
+						sessions: configState.sessions.map(function (s) {
+							const o = {};
+							Object.keys(s).forEach(function (k) {
+								const v = s[k];
+								if (v === '' || v === null || v === undefined) { return; }
+								o[k] = v;
+							});
+							return o;
+						}),
+						mixin: (configState.mixin && configState.mixin.llm_nos && configState.mixin.llm_nos.length) ? configState.mixin : null,
+					};
+					await window.gaApi.saveLLMConfig(body);
+					configStatusEl.textContent = '已保存到 mykey.json';
+					if (reloadAfter) {
+						configStatusEl.textContent = '保存成功，载入中…';
+						const rr = await window.gaApi.reloadLLMConfig();
+						if (rr && rr.error) {
+							configStatusEl.textContent = '载入失败：' + rr.error;
+							alert('载入失败：' + rr.error);
+						} else {
+							configStatusEl.textContent = '✓ 载入完成（' + ((rr && rr.count) || 0) + ' 个 LLM）';
+							checkLlmConfigured();
+							setTimeout(closeConfigEditor, 800);
+						}
+					}
+				} catch (e) {
+					configStatusEl.textContent = '保存失败：' + (e.message || e);
+					alert('保存失败：' + (e.message || e));
+				}
+			}
+
+			configModalCloseEl.addEventListener('click', closeConfigEditor);
+			configModalCancelEl.addEventListener('click', closeConfigEditor);
+			configModalEl.addEventListener('click', function (e) {
+				if (e.target === configModalEl) { closeConfigEditor(); }
+			});
+			configModalSaveEl.addEventListener('click', function () { saveConfig(false); });
+			configModalSaveReloadEl.addEventListener('click', function () { saveConfig(true); });
+			if (settingsConfigBtn) { settingsConfigBtn.addEventListener('click', function () { closeAllPanels(); openConfigEditor(); }); }
+
+			// Missing-config detection + banner
+			async function checkLlmConfigured() {
+				try {
+					const r = await window.gaApi.getLLMConfig();
+					const ok = !!(r && r.sessions && r.sessions.length);
+					cfgPromptEl.hidden = ok;
+				} catch {
+					cfgPromptEl.hidden = false;
+				}
+			}
+			if (cfgPromptOpenEl) { cfgPromptOpenEl.addEventListener('click', openConfigEditor); }
+			if (cfgPromptDismissEl) { cfgPromptDismissEl.addEventListener('click', function () { cfgPromptEl.hidden = true; }); }
+			setTimeout(checkLlmConfigured, 1500);
 
 			// ── Mode dropdown (Agent / Editor) ────────────────────────────
 			function applyMode(name) {
