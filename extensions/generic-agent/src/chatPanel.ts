@@ -4711,6 +4711,34 @@ export class ChatPanel {
 				{ value: 'claude', label: 'Claude (文本协议工具，deprecated)' },
 				{ value: 'oai', label: 'OAI (文本协议工具，deprecated)' },
 			];
+			// Provider presets: one-click templates that fill apibase + sensible defaults.
+			// Order matters: first item is shown first; last item is the "custom" fallback.
+			const PROVIDER_PRESETS = [
+				{ id: 'openai',     icon: '🟢', label: 'OpenAI',         hint: 'GPT-4o / GPT-5 / o-series',                  type: 'native_oai',    apibase: 'https://api.openai.com/v1',                  model: 'gpt-4o' },
+				{ id: 'anthropic',  icon: '🟣', label: 'Anthropic',      hint: 'Claude Sonnet 4.5 / Opus / Haiku',           type: 'native_claude', apibase: 'https://api.anthropic.com',                  model: 'claude-sonnet-4-5-20250929' },
+				{ id: 'kimi',       icon: '🟡', label: 'Kimi (Moonshot)', hint: '国内访问，长上下文，价格友好',                type: 'native_oai',    apibase: 'https://api.moonshot.cn/v1',                 model: 'kimi-k2-turbo-preview' },
+				{ id: 'deepseek',   icon: '🔵', label: 'DeepSeek',       hint: '极致性价比，适合 agent 长会话',                type: 'native_oai',    apibase: 'https://api.deepseek.com/v1',                model: 'deepseek-chat' },
+				{ id: 'zhipu',      icon: '🟠', label: '智谱 GLM',        hint: 'GLM-4.5 / GLM-4-flash',                      type: 'native_oai',    apibase: 'https://open.bigmodel.cn/api/paas/v4',       model: 'glm-4.5' },
+				{ id: 'minimax',    icon: '🔴', label: 'MiniMax',        hint: 'M1 / abab6.5',                              type: 'native_oai',    apibase: 'https://api.minimax.chat/v1',                model: 'MiniMax-M1' },
+				{ id: 'qwen',       icon: '🟤', label: '通义千问',         hint: 'qwen-max / qwen-plus，阿里云 DashScope',      type: 'native_oai',    apibase: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-max' },
+				{ id: 'siliconflow', icon: '⚪', label: 'SiliconFlow',    hint: '聚合多家开源模型，便宜实惠',                  type: 'native_oai',    apibase: 'https://api.siliconflow.cn/v1',              model: 'deepseek-ai/DeepSeek-V3' },
+				{ id: 'custom',     icon: '⚙️', label: '自定义 / 中转',   hint: '兼容 OpenAI 协议的任意 endpoint',             type: 'native_oai',    apibase: '',                                            model: '' },
+			];
+			function makeSessionFromPreset(preset) {
+				const baseKey = preset.id === 'custom' ? 'native_oai_config' : (preset.id + '_config');
+				let n = 1;
+				const used = new Set(configState.sessions.map(function (s) { return s._key; }));
+				while (used.has(baseKey + n)) { n++; }
+				return {
+					_type: preset.type,
+					_key: baseKey + n,
+					name: preset.label,
+					apikey: '',
+					apibase: preset.apibase,
+					model: preset.model,
+				};
+			}
+
 			const ADVANCED_FIELDS = [
 				{ key: 'reasoning_effort', label: 'reasoning_effort', placeholder: 'none|minimal|low|medium|high|xhigh' },
 				{ key: 'thinking_type', label: 'thinking_type', placeholder: 'adaptive|enabled|disabled' },
@@ -4927,31 +4955,70 @@ export class ChatPanel {
 				configModalBodyEl.appendChild(sec);
 
 				if (!configState.sessions.length) {
-					const empty = document.createElement('div');
-					empty.className = 'dropdown-empty';
-					empty.textContent = '尚未配置任何 LLM。点击下方按钮添加。';
-					configModalBodyEl.appendChild(empty);
+					// First-run onboarding: provider preset cards instead of bare empty hint.
+					const wizard = document.createElement('div');
+					wizard.style.cssText = 'padding: 4px 0 6px;';
+					const wizTitle = document.createElement('div');
+					wizTitle.style.cssText = 'font-size:13px;font-weight:600;color:var(--fg-strong);margin-bottom:6px;';
+					wizTitle.textContent = '👋 第一次使用？选择你的 LLM 供应商一键开始：';
+					wizard.appendChild(wizTitle);
+					const wizSub = document.createElement('div');
+					wizSub.className = 'cfg-status';
+					wizSub.style.cssText = 'margin-bottom:10px;';
+					wizSub.textContent = '点击预设 → 自动填好 endpoint 和默认参数，你只需粘贴 API Key 并点测试。';
+					wizard.appendChild(wizSub);
+
+					const grid = document.createElement('div');
+					grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:8px;';
+					PROVIDER_PRESETS.forEach(function (preset) {
+						const card = document.createElement('button');
+						card.type = 'button';
+						card.style.cssText = 'padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-glass);color:var(--fg);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px;transition:background 0.15s;';
+						card.onmouseenter = function () { card.style.background = 'var(--bg-glass-hi)'; };
+						card.onmouseleave = function () { card.style.background = 'var(--bg-glass)'; };
+						const ttl = document.createElement('div');
+						ttl.style.cssText = 'font-size:13px;font-weight:600;color:var(--fg-strong);';
+						ttl.textContent = preset.icon + ' ' + preset.label;
+						card.appendChild(ttl);
+						const desc = document.createElement('div');
+						desc.style.cssText = 'font-size:11px;color:var(--fg-muted);line-height:1.4;';
+						desc.textContent = preset.hint;
+						card.appendChild(desc);
+						card.addEventListener('click', function () {
+							configState.sessions.push(makeSessionFromPreset(preset));
+							renderConfigEditor();
+						});
+						grid.appendChild(card);
+					});
+					wizard.appendChild(grid);
+
+					const customBtn = document.createElement('button');
+					customBtn.className = 'cfg-add-btn';
+					customBtn.style.marginTop = '4px';
+					customBtn.textContent = '+ 我要自定义（高级用户）';
+					customBtn.addEventListener('click', function () {
+						configState.sessions.push(makeSessionFromPreset(PROVIDER_PRESETS[PROVIDER_PRESETS.length - 1]));
+						renderConfigEditor();
+					});
+					wizard.appendChild(customBtn);
+
+					configModalBodyEl.appendChild(wizard);
 				} else {
 					configState.sessions.forEach(function (_, idx) {
 						configModalBodyEl.appendChild(buildSessionCard(idx));
 					});
-				}
-
-				const addBtn = document.createElement('button');
-				addBtn.className = 'cfg-add-btn';
-				addBtn.textContent = '+ 添加 Session';
-				addBtn.addEventListener('click', function () {
-					configState.sessions.push({
-						_type: 'native_oai',
-						_key: 'native_oai_config' + (configState.sessions.length + 1),
-						name: '',
-						apikey: '',
-						apibase: 'https://api.openai.com/v1',
-						model: '',
+					const addBtn = document.createElement('button');
+					addBtn.className = 'cfg-add-btn';
+					addBtn.textContent = '+ 添加 Session';
+					addBtn.addEventListener('click', function () {
+						// Re-show preset picker as a dropdown if user wants to add another.
+						const choice = window.prompt('选择供应商预设：\n' + PROVIDER_PRESETS.map(function (p, i) { return (i + 1) + '. ' + p.label; }).join('\n') + '\n\n输入编号（默认 1: OpenAI）：', '1');
+						const i = Math.max(1, Math.min(PROVIDER_PRESETS.length, parseInt(choice || '1', 10) || 1)) - 1;
+						configState.sessions.push(makeSessionFromPreset(PROVIDER_PRESETS[i]));
+						renderConfigEditor();
 					});
-					renderConfigEditor();
-				});
-				configModalBodyEl.appendChild(addBtn);
+					configModalBodyEl.appendChild(addBtn);
+				}
 
 				// Mixin section
 				const msec = document.createElement('div');
