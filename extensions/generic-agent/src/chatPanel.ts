@@ -5623,34 +5623,25 @@ export class ChatPanel {
 				dropOverlay.textContent = '拖入文件作为上下文';
 				document.body.appendChild(dropOverlay);
 				var _appDragDepth = 0;
-				function _hasFiles(dt) {
-					if (!dt) return false;
-					if (dt.types) {
-						for (var i = 0; i < dt.types.length; i++) {
-							var t = dt.types[i];
-							if (t === 'Files' || t === 'text/uri-list' || t === 'application/vnd.code.uri-list') return true;
-						}
-					}
-					return false;
-				}
+				// IMPORTANT: in Chromium, DataTransfer.types/items are
+				// REDACTED during dragenter/dragover for cross-origin
+				// privacy. We can only inspect raw URI-list contents on
+				// 'drop'. So we MUST always preventDefault on dragover —
+				// without that the browser refuses to fire 'drop' at all.
 				window.addEventListener('dragenter', function (e) {
-					if (!_hasFiles(e.dataTransfer)) return;
 					e.preventDefault();
 					_appDragDepth++;
 					dropOverlay.classList.add('active');
-				});
+				}, true);
 				window.addEventListener('dragover', function (e) {
-					if (!_hasFiles(e.dataTransfer)) return;
 					e.preventDefault();
 					if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-				});
+				}, true);
 				window.addEventListener('dragleave', function (e) {
-					if (!_hasFiles(e.dataTransfer)) return;
 					_appDragDepth = Math.max(0, _appDragDepth - 1);
 					if (_appDragDepth === 0) dropOverlay.classList.remove('active');
-				});
+				}, true);
 				window.addEventListener('drop', function (e) {
-					if (!_hasFiles(e.dataTransfer)) return;
 					e.preventDefault();
 					_appDragDepth = 0;
 					dropOverlay.classList.remove('active');
@@ -5675,11 +5666,18 @@ export class ChatPanel {
 						setComposerStatus('err', '请从资源管理器或编辑器拖拽文件');
 						return;
 					}
-					if (uris.length === 0) return;
+					if (uris.length === 0) {
+						console.log('[ga drop] no URIs, types=', dt && dt.types ? Array.prototype.slice.call(dt.types) : '(none)');
+						return;
+					}
+					// Got URIs — stop the legacy composerRow handler from
+					// also firing pickFiles().
+					e.stopPropagation();
+					if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
 					var rid = 'drop' + (++pickReqSeq);
 					pickReqs[rid] = true;
 					vscode.postMessage({ kind: 'drop_files', requestId: rid, uris: uris });
-				});
+				}, true);
 
 				// ── Drag & drop visual feedback ───────────────────────
 				// Real drag-drop attachment is awkward in webviews because
