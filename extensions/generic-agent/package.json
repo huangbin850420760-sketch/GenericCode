@@ -88,6 +88,10 @@
         "command": "genericAgent.inlineEdit.regenerate",
         "title": "GenericAgent: Regenerate Inline Edit",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "genericAgent.toggleInlineCompletion",
+        "title": "GenericAgent: Toggle Inline Completion (Tab Ghost Text)"
       }
     ],
     "keybindings": [
@@ -189,6 +193,11 @@
           ],
           "default": "enter",
           "description": "输入框中发送消息的快捷键。"
+        },
+        "genericAgent.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "在编辑器中启用 GenericAgent 行内补全（Tab 接受幽灵文本）。需要后端 LLM 已配置。可用 'GenericAgent: Toggle Inline Completion' 命令快速切换。"
         }
       }
     }

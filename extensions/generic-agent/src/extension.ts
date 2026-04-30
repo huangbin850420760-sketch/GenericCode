@@ -7,6 +7,7 @@ import { ChatPanel, registerApplyProvider } from './chatPanel';
 import { IdeActions } from './ideActions';
 import { ContextProvider } from './contextProvider';
 import { InlineEditController } from './inlineEdit';
+import { registerInlineCompletion } from './inlineCompletion';
 import { BotKind, BotProcessManager } from './botProcessManager';
 
 let processMgr: PythonProcessManager | undefined;
@@ -75,7 +76,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 		}),
 		vscode.commands.registerCommand('genericAgent.openMockup', async () => {
 			// Show the static design mockup (media/mockup.html) in a webview.
-			// Pure UI preview â€?no backend wiring â€?so the user can confirm
+			// Pure UI preview ï¿½?no backend wiring ï¿½?so the user can confirm
 			// the design before we apply it to ChatPanel.
 			const panel = vscode.window.createWebviewPanel(
 				'genericAgentMockup',
@@ -94,6 +95,9 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 			await bootstrapBackend(ctx, chat);
 		}),
 	);
+
+	/* genericAgent.inlineCompletion: registered once during activate */
+	registerInlineCompletion(ctx, () => lastHttpPort);
 
 	// 3. Cursor-style first paint: show the chat shell immediately,
 	// before the Python backend finishes booting.  The real backend
@@ -122,7 +126,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 			ctx.subscriptions.push(agentClient);
 		}
 		ChatPanel.createOrShow(ctx.extensionUri, agentClient, lastHttpPort ?? 0, botMgr, ctx);
-		vscode.window.showErrorMessage(`GenericAgent: backend failed to start â€?${msg}`);
+		vscode.window.showErrorMessage(`GenericAgent: backend failed to start ï¿½?${msg}`);
 	}
 }
 
@@ -134,7 +138,7 @@ async function bootstrapBackend(ctx: vscode.ExtensionContext, chat: ChatViewProv
 	lastHttpPort = ports.http;
 	chat.setBackendPorts(ports);
 	// Note: the chat panel, if already open, keeps its existing AgentClient
-	// reference â€?that reference is updated below by constructing a fresh
+	// reference ï¿½?that reference is updated below by constructing a fresh
 	// `agentClient`.  If the panel needs to pick up the new client (e.g. on
 	// a manual `Restart Backend`), we dispose and re-show it.
 	if (ChatPanel.current) {
@@ -178,7 +182,7 @@ async function bootstrapBackend(ctx: vscode.ExtensionContext, chat: ChatViewProv
 
 	// Cmd+I inline edit.  Registered once; reuses the long-lived client.
 	// Safe to re-register on backend restart because the command name
-	// stays the same â€?but VSCode errors on duplicate registration, so we
+	// stays the same ï¿½?but VSCode errors on duplicate registration, so we
 	// only register on the first bootstrap.
 	if (!inlineEdit) {
 		inlineEdit = new InlineEditController(agentClient);
