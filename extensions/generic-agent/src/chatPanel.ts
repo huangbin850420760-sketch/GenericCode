@@ -47,6 +47,9 @@ export class ChatPanel {
 	private readonly httpPort: number;
 	private botMgr?: BotProcessManager;
 	private disposables: vscode.Disposable[] = [];
+	// Pending tool-approval requests routed through the chat panel as inline
+	// cards. Resolved when the webview posts back `tool_approval_decision`.
+	private pendingApprovals = new Map<string, (d: { approved: boolean; bypass_session?: boolean; reason?: string }) => void>();
 
 	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number, botMgr?: BotProcessManager, ctx?: vscode.ExtensionContext): void {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
@@ -184,6 +187,39 @@ export class ChatPanel {
 					);
 					break;
 				}
+				case 'tool_approval_decision': {
+					const m = msg as { id?: unknown; approved?: unknown; bypass_session?: unknown; reason?: unknown };
+					const id = String(m.id || '');
+					const resolver = this.pendingApprovals.get(id);
+					if (resolver) {
+						this.pendingApprovals.delete(id);
+						resolver({
+							approved: !!m.approved,
+							bypass_session: !!m.bypass_session,
+							reason: typeof m.reason === 'string' ? m.reason : undefined,
+						});
+					}
+					break;
+				}
+				case 'drop_files': {
+					// Resolve dropped file URIs into chips identical to pick_files_result
+					// so the webview reuses its existing attachment rendering.
+					const reqId = String((msg as { requestId?: unknown }).requestId || '');
+					const uris = ((msg as { uris?: unknown }).uris || []) as string[];
+					const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+					const out = uris.map(u => {
+						let abs = u;
+						try {
+							abs = vscode.Uri.parse(u).fsPath || u;
+						} catch { /* keep raw */ }
+						const rel = wsRoot && abs.startsWith(wsRoot)
+							? abs.slice(wsRoot.length).replace(/^[\\/]+/, '').replace(/\\/g, '/')
+							: abs;
+						return { abs, rel, name: rel.split('/').pop() || rel };
+					}).filter(x => x.abs);
+					this.post({ kind: 'pick_files_result', requestId: reqId, files: out });
+					break;
+				}
 				case 'pick_files': {
 					// Open the native VS Code file picker and return the
 					// selected absolute paths to the webview so it can show
@@ -287,6 +323,34 @@ export class ChatPanel {
 	 * URL must start with `/api/`; absolute URLs and non-loopback hosts
 	 * are rejected as a defensive measure.
 	 */
+	/**
+	 * Render an inline tool-approval card in the chat stream and return a
+	 * promise that resolves when the user clicks Allow / Deny / Allow-session.
+	 * Falls back to rejecting after the timeout (default 5 min) so backend
+	 * never deadlocks if the user closes the panel.
+	 */
+	public requestToolApproval(req: {
+		tool: string;
+		risk: 'safe' | 'caution' | 'danger';
+		args?: Record<string, unknown>;
+		preview?: string;
+	}, timeoutMs = 300_000): Promise<{ approved: boolean; bypass_session?: boolean; reason?: string }> {
+		const id = `appr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+		this.panel.reveal(undefined, true);
+		const p = new Promise<{ approved: boolean; bypass_session?: boolean; reason?: string }>((resolve) => {
+			this.pendingApprovals.set(id, resolve);
+			this.post({ kind: 'tool_approval', id, ...req });
+			setTimeout(() => {
+				if (this.pendingApprovals.has(id)) {
+					this.pendingApprovals.delete(id);
+					this.post({ kind: 'tool_approval_resolved', id, approved: false, reason: '审批超时' });
+					resolve({ approved: false, reason: '审批超时（5 分钟）' });
+				}
+			}, timeoutMs);
+		});
+		return p;
+	}
+
 	private async handleApiCall(requestId: string, method: string, url: string, body: unknown): Promise<void> {
 		if (!requestId || !url.startsWith('/api/')) {
 			this.post({ kind: 'apiResult', requestId, error: 'Invalid api url' });
@@ -1233,6 +1297,58 @@ export class ChatPanel {
 			to   { opacity: 1; transform: none; }
 		}
 		.msg .meta { display: flex; align-items: center; gap: 8px; min-height: 18px; }
+		/* Inline tool-approval card */
+		.msg.appr .body {
+			border: 1px solid var(--border, #3c3c3c);
+			border-radius: 8px;
+			padding: 10px 12px;
+			background: var(--bg-soft, rgba(255,255,255,0.03));
+		}
+		.msg.appr .appr-badge {
+			font-size: 11px; padding: 2px 8px; border-radius: 10px;
+			font-weight: 600; letter-spacing: 0.02em;
+		}
+		.msg.appr .appr-danger { background: #c62828; color: #fff; }
+		.msg.appr .appr-caution { background: #ef6c00; color: #fff; }
+		.msg.appr .appr-safe { background: #2e7d32; color: #fff; }
+		.msg.appr .appr-tool {
+			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+			font-size: 12px; color: var(--fg, inherit); opacity: 0.85;
+		}
+		.msg.appr .appr-preview {
+			margin: 6px 0 10px 0; padding: 8px 10px;
+			background: var(--bg-code, rgba(0,0,0,0.25));
+			border-radius: 6px;
+			font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+			font-size: 12px; line-height: 1.5;
+			max-height: 240px; overflow: auto;
+			white-space: pre-wrap; word-break: break-word;
+		}
+		.msg.appr .appr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+		.msg.appr .appr-btn {
+			padding: 5px 12px; border-radius: 6px;
+			border: 1px solid var(--border, #3c3c3c);
+			background: var(--btn-bg, transparent); color: var(--fg, inherit);
+			font-size: 12px; cursor: pointer;
+		}
+		.msg.appr .appr-btn:hover { background: var(--btn-hover, rgba(255,255,255,0.06)); }
+		.msg.appr .appr-allow { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+		.msg.appr .appr-allow:hover { background: #388e3c; }
+		.msg.appr .appr-deny { background: #c62828; color: #fff; border-color: #c62828; }
+		.msg.appr .appr-deny:hover { background: #d32f2f; }
+		.msg.appr .appr-status { margin-top: 6px; font-size: 12px; opacity: 0.8; }
+		.msg.appr .appr-status-ok { color: #4caf50; }
+		.msg.appr .appr-status-no { color: #ef5350; }
+		/* Drop-overlay shown when files are dragged over the panel */
+		.drop-overlay {
+			position: fixed; inset: 0; pointer-events: none;
+			background: rgba(33, 150, 243, 0.12);
+			border: 2px dashed #2196f3;
+			z-index: 9999; display: none;
+			align-items: center; justify-content: center;
+			color: #fff; font-size: 16px; font-weight: 600;
+		}
+		.drop-overlay.active { display: flex; }
 		.msg .who {
 			font-size: 10.5px; color: var(--fg-dim);
 			text-transform: uppercase; letter-spacing: 0.08em;
@@ -3850,8 +3966,97 @@ export class ChatPanel {
 					case 'bot_error':
 						renderBotError(m.error || 'Bot operation failed');
 						break;
+					case 'tool_approval':
+						appendApprovalCard(m);
+						break;
+					case 'tool_approval_resolved':
+						finalizeApprovalCard(m.id, m.approved, m.reason);
+						break;
 				}
 			});
+
+			// ── Inline tool-approval card (Cursor-style) ──────────────────
+			const _approvalCards = new Map();
+			function appendApprovalCard(req) {
+				const w = document.getElementById('welcome');
+				if (w) { w.classList.add('hidden'); }
+				if (logEl) { logEl.classList.remove('hidden'); }
+				const stick = isNearBottom();
+				const el = document.createElement('div');
+				el.className = 'msg appr';
+				el.dataset.apprId = req.id;
+				const risk = req.risk || 'caution';
+				const riskLabel = risk === 'danger' ? '⛔ 高风险'
+					: risk === 'caution' ? '⚠️ 中风险' : '✅ 低风险';
+				const meta = document.createElement('div');
+				meta.className = 'meta';
+				const who = document.createElement('div');
+				who.className = 'who';
+				who.textContent = '权限请求';
+				meta.appendChild(who);
+				const badge = document.createElement('span');
+				badge.className = 'appr-badge appr-' + risk;
+				badge.textContent = riskLabel;
+				meta.appendChild(badge);
+				const tname = document.createElement('span');
+				tname.className = 'appr-tool';
+				tname.textContent = req.tool || 'tool';
+				meta.appendChild(tname);
+				const spacer = document.createElement('span');
+				spacer.className = 'spacer';
+				meta.appendChild(spacer);
+				const body = document.createElement('div');
+				body.className = 'body appr-body';
+				const pre = document.createElement('pre');
+				pre.className = 'appr-preview';
+				pre.textContent = String(req.preview || '').slice(0, 4000);
+				body.appendChild(pre);
+				const actions = document.createElement('div');
+				actions.className = 'appr-actions';
+				const btnAllow = document.createElement('button');
+				btnAllow.className = 'appr-btn appr-allow';
+				btnAllow.textContent = '✓ 允许';
+				const btnDeny = document.createElement('button');
+				btnDeny.className = 'appr-btn appr-deny';
+				btnDeny.textContent = '✕ 拒绝';
+				const btnSession = document.createElement('button');
+				btnSession.className = 'appr-btn appr-session';
+				btnSession.textContent = '✓ 本会话全部允许';
+				actions.appendChild(btnAllow);
+				actions.appendChild(btnDeny);
+				actions.appendChild(btnSession);
+				body.appendChild(actions);
+				const status = document.createElement('div');
+				status.className = 'appr-status';
+				body.appendChild(status);
+				el.appendChild(meta);
+				el.appendChild(body);
+				logEl.appendChild(el);
+				_approvalCards.set(req.id, { el: el, status: status, actions: actions });
+				const reply = function (approved, bypass_session) {
+					vscode.postMessage({
+						kind: 'tool_approval_decision',
+						id: req.id,
+						approved: approved,
+						bypass_session: bypass_session,
+					});
+					finalizeApprovalCard(req.id, approved, bypass_session ? '本会话全部允许' : (approved ? '已允许' : '已拒绝'));
+				};
+				btnAllow.addEventListener('click', function () { reply(true, false); });
+				btnDeny.addEventListener('click', function () { reply(false, false); });
+				btnSession.addEventListener('click', function () { reply(true, true); });
+				scrollToBottom(stick);
+			}
+			function finalizeApprovalCard(id, approved, reason) {
+				const card = _approvalCards.get(id);
+				if (!card) { return; }
+				_approvalCards.delete(id);
+				if (card.actions) { card.actions.style.display = 'none'; }
+				if (card.status) {
+					card.status.textContent = (approved ? '✓ ' : '✕ ') + (reason || (approved ? '已允许' : '已拒绝'));
+					card.status.classList.add(approved ? 'appr-status-ok' : 'appr-status-no');
+				}
+			}
 
 			// ── Toolbar dropdowns / Welcome / Mode (Cursor-style) ─────────
 			const newChatBtn = document.getElementById('btn-new-chat');
@@ -5406,6 +5611,75 @@ export class ChatPanel {
 
 				if (btnFile)  btnFile .addEventListener('click', function () { pickFiles(false); });
 				if (btnImage) btnImage.addEventListener('click', function () { pickFiles(true); });
+
+				// Drag-and-drop files into chat as @-mentions.
+				// VS Code explorer/editor tabs put text/uri-list on the
+				// DataTransfer (CRLF-separated file URIs). We parse it,
+				// hand URIs to the extension which resolves them to
+				// abs/rel/name, then reuse pick_files_result pipeline so
+				// the dropped files appear as @-tokens.
+				var dropOverlay = document.createElement('div');
+				dropOverlay.className = 'drop-overlay';
+				dropOverlay.textContent = '拖入文件作为上下文';
+				document.body.appendChild(dropOverlay);
+				var _appDragDepth = 0;
+				function _hasFiles(dt) {
+					if (!dt) return false;
+					if (dt.types) {
+						for (var i = 0; i < dt.types.length; i++) {
+							var t = dt.types[i];
+							if (t === 'Files' || t === 'text/uri-list' || t === 'application/vnd.code.uri-list') return true;
+						}
+					}
+					return false;
+				}
+				window.addEventListener('dragenter', function (e) {
+					if (!_hasFiles(e.dataTransfer)) return;
+					e.preventDefault();
+					_appDragDepth++;
+					dropOverlay.classList.add('active');
+				});
+				window.addEventListener('dragover', function (e) {
+					if (!_hasFiles(e.dataTransfer)) return;
+					e.preventDefault();
+					if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+				});
+				window.addEventListener('dragleave', function (e) {
+					if (!_hasFiles(e.dataTransfer)) return;
+					_appDragDepth = Math.max(0, _appDragDepth - 1);
+					if (_appDragDepth === 0) dropOverlay.classList.remove('active');
+				});
+				window.addEventListener('drop', function (e) {
+					if (!_hasFiles(e.dataTransfer)) return;
+					e.preventDefault();
+					_appDragDepth = 0;
+					dropOverlay.classList.remove('active');
+					var uris = [];
+					var dt = e.dataTransfer;
+					var raw = '';
+					try { raw = dt.getData('application/vnd.code.uri-list') || ''; } catch (_) { raw = ''; }
+					if (!raw) {
+						try { raw = dt.getData('text/uri-list') || ''; } catch (_) { raw = ''; }
+					}
+					if (raw) {
+						var lines = raw.split(/\\r?\\n/);
+						for (var i = 0; i < lines.length; i++) {
+							var line = (lines[i] || '').trim();
+							if (line && line.charAt(0) !== '#') uris.push(line);
+						}
+					}
+					// Some hosts only deliver native File objects, no URI list.
+					// In webviews these don't expose absolute paths, so we
+					// notify the user instead of silently dropping.
+					if (uris.length === 0 && dt.files && dt.files.length) {
+						setComposerStatus('err', '请从资源管理器或编辑器拖拽文件');
+						return;
+					}
+					if (uris.length === 0) return;
+					var rid = 'drop' + (++pickReqSeq);
+					pickReqs[rid] = true;
+					vscode.postMessage({ kind: 'drop_files', requestId: rid, uris: uris });
+				});
 
 				// ── Drag & drop visual feedback ───────────────────────
 				// Real drag-drop attachment is awkward in webviews because

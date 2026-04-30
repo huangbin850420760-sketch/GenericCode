@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AgentClient, ProtocolMessage } from './agentClient';
+import { ChatPanel } from './chatPanel';
 import { logger } from './logger';
 
 /**
@@ -40,12 +41,27 @@ export class IdeActions {
 		const p = (msg.payload || {}) as ToolApprovalPayload;
 		const tool = p.tool || 'unknown';
 		const risk = p.risk || 'caution';
-		const preview = (p.preview || '').slice(0, 1500);
+		const preview = (p.preview || '').slice(0, 4000);
 
 		// Bypass mode: auto-approve everything.
 		const cfg = vscode.workspace.getConfiguration('genericAgent');
 		if (cfg.get<boolean>('permission.bypassMode', false)) {
 			return this.replyApproval(msg, { approved: true, reason: 'bypass-mode' });
+		}
+
+		// Prefer Cursor-style inline card in the chat panel. Fall back to a
+		// native modal if the chat panel is not currently open.
+		const panel = ChatPanel.current;
+		if (panel) {
+			const decision = await panel.requestToolApproval({ tool, risk, args: p.args, preview });
+			if (decision.bypass_session) {
+				try {
+					await cfg.update('permission.bypassMode', true, vscode.ConfigurationTarget.Workspace);
+				} catch (e) {
+					logger.warn('failed to persist bypassMode', (e as Error).message);
+				}
+			}
+			return this.replyApproval(msg, decision);
 		}
 
 		const riskLabel = risk === 'danger' ? '⛔ 高风险' : risk === 'caution' ? '⚠️ 中风险' : '✅ 低风险';
