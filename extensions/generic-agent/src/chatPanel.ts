@@ -318,14 +318,6 @@ export class ChatPanel {
 			vscode.window.showWarningMessage(`GenericAgent: SOP 源文件不存在: ${name}`);
 			return;
 		}
-		const content = await fs.promises.readFile(file, 'utf8');
-		const doc = await vscode.workspace.openTextDocument({ content, language: 'markdown' });
-		await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Active });
-		const edit = await vscode.window.showInformationMessage(
-			`已只读预览 SOP：${nodePath.basename(file)}`,
-			'编辑源文件',
-		);
-		if (edit !== '编辑源文件') { return; }
 		const confirm = await vscode.window.showWarningMessage(
 			`将打开可编辑源文件：${file}`,
 			{ modal: true },
@@ -787,6 +779,58 @@ export class ChatPanel {
 			filter: none;
 		}
 		.dropdown-foot button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+		.sop-modal-backdrop {
+			position: fixed; inset: 0; z-index: 100;
+			background: rgba(0,0,0,0.42);
+			display: none; align-items: center; justify-content: center;
+			padding: 28px;
+		}
+		.sop-modal-backdrop.show { display: flex; }
+		.sop-modal {
+			width: min(860px, 94vw); height: min(760px, 86vh);
+			background: rgba(20,20,28,0.97);
+			color: var(--fg);
+			border: 1px solid var(--border-strong);
+			border-radius: 16px;
+			box-shadow: var(--shadow-pop);
+			display: flex; flex-direction: column;
+			overflow: hidden;
+		}
+		html[data-theme="light"] .sop-modal { background: rgba(255,255,255,0.98); }
+		.sop-modal-head {
+			flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+			padding: 12px 14px; border-bottom: 1px solid var(--border);
+		}
+		.sop-modal-title {
+			flex: 1 1 auto; min-width: 0;
+			font-size: 14px; font-weight: 650; color: var(--fg-strong);
+			overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+		}
+		.sop-modal-close {
+			width: 28px; height: 28px; padding: 0;
+			border-radius: 8px; border: 1px solid transparent;
+			background: transparent; color: var(--fg-muted); cursor: pointer;
+		}
+		.sop-modal-close:hover { background: var(--bg-glass-hi); color: var(--fg-strong); border-color: var(--border); }
+		.sop-modal-body {
+			flex: 1 1 auto; min-height: 0; overflow: auto;
+			padding: 18px 22px;
+		}
+		.sop-modal-body .md { max-width: 780px; margin: 0 auto; }
+		.sop-modal-foot {
+			flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 10px;
+			padding: 12px 14px; border-top: 1px solid var(--border);
+		}
+		.sop-modal-foot button {
+			padding: 7px 14px; border-radius: 8px;
+			border: 1px solid var(--border); cursor: pointer;
+			background: var(--bg-glass-hi); color: var(--fg);
+		}
+		.sop-modal-foot button.primary {
+			background: var(--brand-grad); color: #fff; border-color: transparent;
+			box-shadow: var(--shadow-brand);
+		}
 
 		/* ── Welcome empty state ─────────────────────────────────────── */
 		.welcome {
@@ -1893,6 +1937,20 @@ export class ChatPanel {
 			<span>📎 Drop to attach</span>
 		</div>
 	</footer>
+	<div class="sop-modal-backdrop" id="sop-modal" role="dialog" aria-modal="true" aria-label="SOP Preview">
+		<div class="sop-modal">
+			<div class="sop-modal-head">
+				<div class="sop-modal-title" id="sop-modal-title">SOP</div>
+				<button class="sop-modal-close" id="sop-modal-close" title="Close" aria-label="Close">×</button>
+			</div>
+			<div class="sop-modal-body" id="sop-modal-body"></div>
+			<div class="sop-modal-foot">
+				<button id="sop-modal-use" class="primary">使用</button>
+				<button id="sop-modal-edit">编辑</button>
+				<button id="sop-modal-cancel">关闭</button>
+			</div>
+		</div>
+	</div>
 
 	<script nonce="${nonce}">
 		// ── User preferences (frozen at panel-open time) ───────────────
@@ -3479,6 +3537,13 @@ export class ChatPanel {
 			const settingsBodyEl = document.getElementById('settings-body');
 			const settingsTitleEl = document.getElementById('settings-title');
 			const settingsReloadBtn = document.getElementById('settings-reload');
+			const sopModalEl = document.getElementById('sop-modal');
+			const sopModalTitleEl = document.getElementById('sop-modal-title');
+			const sopModalBodyEl = document.getElementById('sop-modal-body');
+			const sopModalCloseEl = document.getElementById('sop-modal-close');
+			const sopModalUseEl = document.getElementById('sop-modal-use');
+			const sopModalEditEl = document.getElementById('sop-modal-edit');
+			const sopModalCancelEl = document.getElementById('sop-modal-cancel');
 			const welcomeEl = document.getElementById('welcome');
 			const modeTriggerEl = document.getElementById('mode-trigger');
 			const modeLabelEl = document.getElementById('mode-label');
@@ -3488,9 +3553,9 @@ export class ChatPanel {
 
 			let currentMode = 'agent';
 			let activeSessionPath = null;
-			let allSessions = [];
 			let allSkills = { tools: [], sops: [] };
 			let skillsLoaded = false;
+			let activeSop = null;
 			let settingsLoaded = false;
 
 			// ── Welcome state visibility ──────────────────────────────────
@@ -3834,7 +3899,7 @@ export class ChatPanel {
 								closeAllPanels();
 								return;
 							}
-							vscode.postMessage({ kind: 'open_sop_source', sopName: it.name || '' });
+							openSopModal(it);
 							closeAllPanels();
 						});
 						skillsListEl.appendChild(row);
@@ -3842,6 +3907,41 @@ export class ChatPanel {
 				};
 				renderGroup('SOPs', sops);
 			}
+
+			function closeSopModal() {
+				activeSop = null;
+				sopModalEl.classList.remove('show');
+			}
+
+			async function openSopModal(it) {
+				activeSop = it;
+				sopModalTitleEl.textContent = it.title || it.name || 'SOP';
+				sopModalBodyEl.innerHTML = '<div class="dropdown-empty">Loading SOP…</div>';
+				sopModalEl.classList.add('show');
+				try {
+					const sop = await window.gaApi.getSop(it.name || '');
+					const content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : '';
+					sopModalBodyEl.innerHTML = '<div class="md">' + renderMarkdown(content || '(empty)') + '</div>';
+				} catch (err) {
+					sopModalBodyEl.innerHTML = '<div class="dropdown-empty">Failed to load SOP: ' + escapeHtml(err.message || String(err)) + '</div>';
+				}
+			}
+
+			sopModalCloseEl.addEventListener('click', closeSopModal);
+			sopModalCancelEl.addEventListener('click', closeSopModal);
+			sopModalEl.addEventListener('click', function (e) {
+				if (e.target === sopModalEl) { closeSopModal(); }
+			});
+			sopModalUseEl.addEventListener('click', function () {
+				if (!activeSop) { return; }
+				insertAtCursor(inputEl, '@sop:' + (activeSop.name || ''));
+				closeSopModal();
+				inputEl.focus();
+			});
+			sopModalEditEl.addEventListener('click', function () {
+				if (!activeSop) { return; }
+				vscode.postMessage({ kind: 'open_sop_source', sopName: activeSop.name || '' });
+			});
 
 			async function loadSkills() {
 				try {
