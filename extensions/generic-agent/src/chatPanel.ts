@@ -5012,7 +5012,7 @@ export class ChatPanel {
 					addBtn.textContent = '+ 添加 Session';
 					addBtn.addEventListener('click', function () {
 						// Re-show preset picker as a dropdown if user wants to add another.
-						const choice = window.prompt('选择供应商预设：\n' + PROVIDER_PRESETS.map(function (p, i) { return (i + 1) + '. ' + p.label; }).join('\n') + '\n\n输入编号（默认 1: OpenAI）：', '1');
+						const choice = window.prompt('选择供应商预设：\\n' + PROVIDER_PRESETS.map(function (p, i) { return (i + 1) + '. ' + p.label; }).join('\\n') + '\\n\\n输入编号（默认 1: OpenAI）：', '1');
 						const i = Math.max(1, Math.min(PROVIDER_PRESETS.length, parseInt(choice || '1', 10) || 1)) - 1;
 						configState.sessions.push(makeSessionFromPreset(PROVIDER_PRESETS[i]));
 						renderConfigEditor();
