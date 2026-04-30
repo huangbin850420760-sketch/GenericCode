@@ -34,6 +34,7 @@ export class PythonProcessManager implements vscode.Disposable {
 	private restartCount = 0;
 	private lastRestartAt = 0;
 	private agentCorePath = '';
+	private disposed = false;
 
 	readonly ready: Promise<BackendPorts>;
 
@@ -86,6 +87,10 @@ export class PythonProcessManager implements vscode.Disposable {
 		this.wireStdio(child);
 
 		child.on('exit', (code, signal) => {
+			if (this.disposed) {
+				logger.info('python backend exited (disposed)', { code, signal });
+				return;
+			}
 			logger.warn('python backend exited', { code, signal });
 			this.maybeRestart();
 		});
@@ -199,6 +204,7 @@ export class PythonProcessManager implements vscode.Disposable {
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		const c = this.child;
 		if (!c || c.killed) { return; }
 		logger.info('disposing backend process', { pid: c.pid });
