@@ -29,8 +29,46 @@ export class IdeActions {
 			case 'open_file': this.onOpenFile(msg).catch(e => logger.warn('open_file failed', (e as Error).message)); break;
 			case 'run_terminal': this.onRunTerminal(msg); break;
 			case 'show_diff': this.onShowDiff(msg).catch(e => logger.warn('show_diff failed', (e as Error).message)); break;
+			case 'tool_approval_request': this.onToolApproval(msg).catch(e => this.replyApproval(msg, { approved: false, reason: e.message })); break;
 			default: break;
 		}
+	}
+
+	// ────────────── tool_approval_request ──────────────
+
+	private async onToolApproval(msg: ProtocolMessage) {
+		const p = (msg.payload || {}) as ToolApprovalPayload;
+		const tool = p.tool || 'unknown';
+		const risk = p.risk || 'caution';
+		const preview = (p.preview || '').slice(0, 1500);
+
+		// Bypass mode: auto-approve everything.
+		const cfg = vscode.workspace.getConfiguration('genericAgent');
+		if (cfg.get<boolean>('permission.bypassMode', false)) {
+			return this.replyApproval(msg, { approved: true, reason: 'bypass-mode' });
+		}
+
+		const riskLabel = risk === 'danger' ? '⛔ 高风险' : risk === 'caution' ? '⚠️ 中风险' : '✅ 低风险';
+		const detail = preview || JSON.stringify(p.args || {}, null, 2).slice(0, 1500);
+		const choice = await vscode.window.showWarningMessage(
+			`${riskLabel} — Agent 请求执行 ${tool}`,
+			{ modal: true, detail },
+			'允许',
+			'拒绝',
+			'本会话全部允许 (Bypass)',
+		);
+		if (choice === '允许') {
+			return this.replyApproval(msg, { approved: true });
+		}
+		if (choice === '本会话全部允许 (Bypass)') {
+			return this.replyApproval(msg, { approved: true, bypass_session: true, reason: 'bypass-session' });
+		}
+		return this.replyApproval(msg, { approved: false, reason: '用户拒绝执行' });
+	}
+
+	private replyApproval(msg: ProtocolMessage, payload: object) {
+		if (!msg.id) { return; }
+		this.client.send({ type: 'tool_approval_response', id: msg.id, payload });
 	}
 
 	// ────────────── edit_file ──────────────
@@ -172,6 +210,13 @@ interface RunTerminalPayload {
 interface ShowDiffPayload {
 	left_path: string;
 	right_content: string;
+}
+
+interface ToolApprovalPayload {
+	tool: string;
+	risk: 'safe' | 'caution' | 'danger';
+	args?: Record<string, unknown>;
+	preview?: string;
 }
 
 // ───────── helpers ─────────

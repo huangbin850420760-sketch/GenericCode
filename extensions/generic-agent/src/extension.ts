@@ -99,6 +99,9 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 	/* genericAgent.inlineCompletion: registered once during activate */
 	registerInlineCompletion(ctx, () => lastHttpPort);
 
+	/* genericAgent.permission.bypassMode: status bar + sync to backend */
+	registerPermissionStatusBar(ctx, () => agentClient);
+
 	// 3. Cursor-style first paint: show the chat shell immediately,
 	// before the Python backend finishes booting.  The real backend
 	// client replaces this offline placeholder once ready.
@@ -200,6 +203,49 @@ export function deactivate(): void {
 	agentClient?.dispose();
 	processMgr?.dispose();
 	botMgr?.dispose();
+}
+
+/**
+ * Status bar item for permission bypass mode. Click → opens settings page.
+ * Tooltip explains current state and how to verify. Bypass changes are pushed
+ * to backend via `set_bypass` message so risky tools auto-approve immediately.
+ */
+function registerPermissionStatusBar(
+	ctx: vscode.ExtensionContext,
+	getClient: () => AgentClient | undefined,
+): void {
+	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 49);
+	item.command = {
+		command: 'workbench.action.openSettings',
+		title: 'GenericAgent permission settings',
+		arguments: ['genericAgent.permission.bypassMode'],
+	};
+	const refresh = (): void => {
+		const cfg = vscode.workspace.getConfiguration('genericAgent');
+		const bypass = cfg.get<boolean>('permission.bypassMode', false);
+		item.text = bypass ? '$(shield) GA Auth: BYPASS' : '$(shield) GA Auth: ASK';
+		item.backgroundColor = bypass
+			? new vscode.ThemeColor('statusBarItem.warningBackground')
+			: undefined;
+		item.tooltip = new vscode.MarkdownString(
+			(bypass
+				? '⚠️ **审批已绕过** —— 风险工具(`code_run`/`file_patch`/`web_execute_js`)将自动放行。'
+				: '✅ **审批模式** —— 风险工具执行前会弹确认对话框。') +
+			'\n\n点击打开设置页切换 `genericAgent.permission.bypassMode`。',
+		);
+		item.show();
+		// Sync to backend so its in-memory bypass flag matches.
+		getClient()?.send({ type: 'set_bypass', payload: { enabled: bypass } });
+	};
+	refresh();
+	ctx.subscriptions.push(
+		item,
+		vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('genericAgent.permission.bypassMode')) {
+				refresh();
+			}
+		}),
+	);
 }
 
 async function pickBot(placeHolder: string): Promise<BotKind | undefined> {

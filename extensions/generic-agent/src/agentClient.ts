@@ -51,6 +51,7 @@ const EXT_FEATURES = [
 	'context_push',
 	'diff_preview',
 	'show_diff',
+	'tool_approval',
 ];
 
 export class AgentClient implements vscode.Disposable {

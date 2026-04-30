@@ -194,6 +194,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "在编辑器中启用 **行内代码补全**（灰色幽灵文本，按 `Tab` 接受、`Esc` 取消）。\n\n**前置**：已在设置或聊天面板中配置好 LLM。\n\n**验证**：勾选后打开任意 `.py`/`.ts`/`.js` 文件，新建一行写半句代码（≥ 4 字符），停顿约 0.3 秒即可看到补全建议；状态栏右下角的 `$(sparkle) GA Complete` 也会显示 ON。"
+        },
+        "genericAgent.permission.bypassMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "⚠️ **跳过所有工具审批**（Claude Code 风格的 `--dangerously-skip-permissions`）。\n\n开启后，Agent 调用 `code_run` / `file_patch` / `web_execute_js` 等风险工具不再弹审批对话框。\n\n仅在你**完全信任当前任务**时使用（例如沙箱里跑批量重构），错误的命令可能直接破坏文件或系统。\n\n切换会立即同步给后端；状态栏 `$(shield) GA Auth` 显示当前模式。"
         }
       }
     }
