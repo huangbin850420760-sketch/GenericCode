@@ -88,10 +88,6 @@
         "command": "genericAgent.inlineEdit.regenerate",
         "title": "GenericAgent: Regenerate Inline Edit",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "genericAgent.toggleInlineCompletion",
-        "title": "GenericAgent: Toggle Inline Completion (Tab Ghost Text)"
       }
     ],
     "keybindings": [
@@ -197,7 +193,7 @@
         "genericAgent.inlineCompletion.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "在编辑器中启用 GenericAgent 行内补全（Tab 接受幽灵文本）。需要后端 LLM 已配置。可用 'GenericAgent: Toggle Inline Completion' 命令快速切换。"
+          "markdownDescription": "在编辑器中启用 **行内代码补全**（灰色幽灵文本，按 `Tab` 接受、`Esc` 取消）。\n\n**前置**：已在设置或聊天面板中配置好 LLM。\n\n**验证**：勾选后打开任意 `.py`/`.ts`/`.js` 文件，新建一行写半句代码（≥ 4 字符），停顿约 0.3 秒即可看到补全建议；状态栏右下角的 `$(sparkle) GA Complete` 也会显示 ON。"
         }
       }
     }

@@ -141,17 +141,33 @@ export function registerInlineCompletion(
 	);
 	ctx.subscriptions.push(sub);
 
-	// Toggle command for quick on/off.
-	const toggleCmd = vscode.commands.registerCommand('genericAgent.toggleInlineCompletion', async () => {
+	// Status bar item: click to jump straight to the setting (user-friendly,
+	// no command palette needed). Tooltip explains how to verify.
+	const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
+	statusItem.command = {
+		command: 'workbench.action.openSettings',
+		title: 'Open GenericAgent Inline Completion settings',
+		arguments: ['genericAgent.inlineCompletion.enabled'],
+	};
+	const refreshStatus = (): void => {
 		const cfg = vscode.workspace.getConfiguration('genericAgent');
-		const cur = cfg.get<boolean>('inlineCompletion.enabled', false);
-		await cfg.update('inlineCompletion.enabled', !cur, vscode.ConfigurationTarget.Global);
-		vscode.window.setStatusBarMessage(
-			`$(robot) GenericAgent inline completion: ${!cur ? 'ON' : 'OFF'}`,
-			3000,
+		const on = cfg.get<boolean>('inlineCompletion.enabled', false);
+		statusItem.text = on ? '$(sparkle) GA Complete: ON' : '$(sparkle) GA Complete: OFF';
+		statusItem.tooltip = new vscode.MarkdownString(
+			(on ? '**行内补全已开启**' : '**行内补全已关闭**') +
+			'\n\n点击打开设置页切换。\n\n验证：在 .py/.ts/.js 文件里写半句代码停顿 0.3 秒，灰色补全将出现，按 `Tab` 接受。',
 		);
-	});
-	ctx.subscriptions.push(toggleCmd);
+		statusItem.show();
+	};
+	refreshStatus();
+	ctx.subscriptions.push(
+		statusItem,
+		vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('genericAgent.inlineCompletion.enabled')) {
+				refreshStatus();
+			}
+		}),
+	);
 
 	return sub;
 }
