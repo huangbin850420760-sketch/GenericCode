@@ -6,6 +6,8 @@ import { AgentClient, StatusPayload } from './agentClient';
 import { BotKind, BotProcessManager } from './botProcessManager';
 
 const BOT_KINDS = new Set<string>(['tg', 'qq', 'feishu', 'wecom', 'dingtalk', 'wechat']);
+const SOPHUB_BASE = 'https://fudankw.cn/sophub';
+const SOPHUB_KEY = 'genericAgent.sophubApiKey';
 
 function isBotKind(value: string): value is BotKind {
 	return BOT_KINDS.has(value);
@@ -41,11 +43,12 @@ export class ChatPanel {
 	static current?: ChatPanel;
 
 	private readonly panel: vscode.WebviewPanel;
+	private readonly ctx: vscode.ExtensionContext;
 	private readonly httpPort: number;
 	private botMgr?: BotProcessManager;
 	private disposables: vscode.Disposable[] = [];
 
-	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number, botMgr?: BotProcessManager): void {
+	public static createOrShow(extensionUri: vscode.Uri, client: AgentClient, httpPort: number, botMgr?: BotProcessManager, ctx?: vscode.ExtensionContext): void {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
 
 		if (ChatPanel.current) {
@@ -65,12 +68,13 @@ export class ChatPanel {
 			},
 		);
 
-		ChatPanel.current = new ChatPanel(panel, client, httpPort, botMgr);
+		ChatPanel.current = new ChatPanel(panel, client, httpPort, botMgr, ctx);
 	}
 
-	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number, botMgr?: BotProcessManager) {
+	private constructor(panel: vscode.WebviewPanel, client: AgentClient, httpPort: number, botMgr?: BotProcessManager, ctx?: vscode.ExtensionContext) {
 		this.httpPort = httpPort;
 		this.panel = panel;
+		this.ctx = ctx ?? (botMgr as unknown as { context?: vscode.ExtensionContext })?.context ?? ({} as vscode.ExtensionContext);
 		this.botMgr = botMgr;
 		this.panel.webview.html = this.html();
 
@@ -171,6 +175,15 @@ export class ChatPanel {
 				case 'open_sop_source':
 					void this.openSopSource(String(msg.sopName || ''));
 					break;
+				case 'sophub': {
+					const m = msg as { requestId?: string; op?: string; payload?: Record<string, unknown> };
+					void this.handleSophub(
+						String(m.requestId || ''),
+						String(m.op || ''),
+						(m.payload || {}) as Record<string, unknown>,
+					);
+					break;
+				}
 				case 'pick_files': {
 					// Open the native VS Code file picker and return the
 					// selected absolute paths to the webview so it can show
@@ -326,6 +339,161 @@ export class ChatPanel {
 		if (confirm !== '继续编辑') { return; }
 		const source = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
 		await vscode.window.showTextDocument(source, { preview: false, viewColumn: vscode.ViewColumn.Active });
+	}
+
+	// ── Sophub marketplace ────────────────────────────────────────────
+	// All HTTP calls to https://fudankw.cn/sophub are proxied through the
+	// extension host so the API key stays in VS Code SecretStorage and
+	// out of the webview.  The webview sends `{kind:'sophub', op, ...}`
+	// and receives `{kind:'sophubResult', requestId, data|error}`.
+	private async sophubKey(autoRegister: boolean): Promise<string | undefined> {
+		const secrets = this.ctx?.secrets;
+		if (!secrets) { return undefined; }
+		let key = await secrets.get(SOPHUB_KEY);
+		if (key || !autoRegister) { return key; }
+		const displayName = (vscode.workspace.workspaceFolders?.[0]?.name) || 'GenericAgent';
+		const r = await this.sophubFetch('POST', '/api/agents/register', undefined, {
+			display_name: `${displayName} (VSCode)`,
+		});
+		const data = r.data as { api_key?: string; claim_code?: string } | undefined;
+		if (!data?.api_key) { throw new Error('Sophub register failed'); }
+		key = data.api_key;
+		await secrets.store(SOPHUB_KEY, key);
+		if (data.claim_code) {
+			void vscode.window.showInformationMessage(
+				`Sophub claim_code: ${data.claim_code} (用于 fudankw.cn /me/agents 认领)`,
+				{ modal: false },
+			);
+		}
+		return key;
+	}
+
+	private async sophubFetch(
+		method: string, path: string, key: string | undefined, body?: unknown,
+	): Promise<{ status: number; data: unknown; text: string }> {
+		const url = SOPHUB_BASE + path;
+		const headers: Record<string, string> = { 'Accept': 'application/json' };
+		if (key) { headers['Authorization'] = `Bearer ${key}`; }
+		const init: RequestInit = { method, headers };
+		if (method !== 'GET' && method !== 'HEAD') {
+			headers['Content-Type'] = 'application/json';
+			init.body = JSON.stringify(body ?? {});
+		}
+		const r = await fetch(url, init);
+		const text = await r.text();
+		let data: unknown = text;
+		try { data = text ? JSON.parse(text) : null; } catch { /* leave as text */ }
+		return { status: r.status, data, text };
+	}
+
+	private async pickSopWriteDir(): Promise<string | undefined> {
+		const roots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+		for (const r of roots) {
+			const p = nodePath.join(nodePath.dirname(r), 'GenericAgent', 'memory');
+			if (fs.existsSync(p)) { return p; }
+		}
+		for (const r of roots) {
+			const p = nodePath.join(r, 'memory');
+			if (fs.existsSync(p)) { return p; }
+		}
+		// Fallback: create memory/ under first workspace root
+		if (roots.length) {
+			const p = nodePath.join(roots[0], 'memory');
+			try { fs.mkdirSync(p, { recursive: true }); return p; } catch { return undefined; }
+		}
+		return undefined;
+	}
+
+	private sanitizeSopFilename(title: string, fileType: string): string {
+		const base = String(title || 'sop').trim().replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120) || 'sop';
+		const ext = fileType === 'python' ? '.py' : '.md';
+		return base.endsWith(ext) ? base : base + ext;
+	}
+
+	private async handleSophub(requestId: string, op: string, payload: Record<string, unknown>): Promise<void> {
+		const reply = (data?: unknown, error?: string): void => {
+			this.post({ kind: 'sophubResult', requestId, data, error });
+		};
+		try {
+			if (!this.ctx?.secrets) {
+				reply(undefined, 'SecretStorage unavailable');
+				return;
+			}
+			if (op === 'keyStatus') {
+				const key = await this.ctx.secrets.get(SOPHUB_KEY);
+				reply({ hasKey: !!key });
+				return;
+			}
+			if (op === 'clearKey') {
+				await this.ctx.secrets.delete(SOPHUB_KEY);
+				reply({ ok: true });
+				return;
+			}
+			if (op === 'search') {
+				const key = await this.sophubKey(true);
+				const q = encodeURIComponent(String(payload.q || ''));
+				const page = Number(payload.page || 1);
+				const ps = Number(payload.page_size || 24);
+				const r = await this.sophubFetch('GET', `/api/sops?q=${q}&page=${page}&page_size=${ps}`, key);
+				if (r.status >= 400) { reply(undefined, `HTTP ${r.status}: ${r.text.slice(0, 200)}`); return; }
+				reply(r.data);
+				return;
+			}
+			if (op === 'get') {
+				const key = await this.sophubKey(true);
+				const id = encodeURIComponent(String(payload.id || ''));
+				const r = await this.sophubFetch('GET', `/api/sops/${id}`, key);
+				if (r.status >= 400) { reply(undefined, `HTTP ${r.status}: ${r.text.slice(0, 200)}`); return; }
+				reply(r.data);
+				return;
+			}
+			if (op === 'upload') {
+				const key = await this.sophubKey(true);
+				const sopName = String(payload.sopName || '');
+				const file = resolveSopSource(sopName);
+				if (!file) { reply(undefined, `本地 SOP 不存在: ${sopName}`); return; }
+				const content = fs.readFileSync(file, 'utf8');
+				if (!content.trim()) { reply(undefined, '文件为空，拒绝上传'); return; }
+				if (Buffer.byteLength(content, 'utf8') > 1024 * 1024) {
+					reply(undefined, '内容超过 1MB');
+					return;
+				}
+				const title = String(payload.title || sopName.replace(/\.md$/i, ''));
+				const r = await this.sophubFetch('POST', '/api/sops', key, {
+					title: title.slice(0, 200),
+					content,
+					file_type: 'markdown',
+				});
+				if (r.status >= 400) { reply(undefined, `HTTP ${r.status}: ${r.text.slice(0, 200)}`); return; }
+				reply(r.data);
+				return;
+			}
+			if (op === 'download') {
+				const key = await this.sophubKey(true);
+				const id = String(payload.id || '');
+				const r = await this.sophubFetch('GET', `/api/sops/${encodeURIComponent(id)}`, key);
+				if (r.status >= 400) { reply(undefined, `HTTP ${r.status}: ${r.text.slice(0, 200)}`); return; }
+				const sop = r.data as { title?: string; content?: string; file_type?: string } | undefined;
+				if (!sop || typeof sop.content !== 'string') { reply(undefined, '响应缺少 content'); return; }
+				const dir = await this.pickSopWriteDir();
+				if (!dir) { reply(undefined, '未找到 memory/ 目录'); return; }
+				const requested = String(payload.filename || '').trim();
+				const filename = requested
+					? this.sanitizeSopFilename(requested.replace(/\.(md|py)$/i, ''), sop.file_type || 'markdown')
+					: this.sanitizeSopFilename(sop.title || 'sop', sop.file_type || 'markdown');
+				const target = nodePath.join(dir, filename);
+				if (fs.existsSync(target) && !payload.overwrite) {
+					reply({ exists: true, target });
+					return;
+				}
+				fs.writeFileSync(target, sop.content, 'utf8');
+				reply({ ok: true, target, filename });
+				return;
+			}
+			reply(undefined, `Unknown sophub op: ${op}`);
+		} catch (e) {
+			reply(undefined, (e as Error).message);
+		}
 	}
 
 	private async handleBotStart(bot: string): Promise<void> {
@@ -831,6 +999,30 @@ export class ChatPanel {
 			background: var(--brand-grad); color: #fff; border-color: transparent;
 			box-shadow: var(--shadow-brand);
 		}
+
+		/* ── Skills tabs (local / marketplace) ───────────────────────── */
+		.skills-tabs { display: flex; gap: 6px; }
+		.skills-tab {
+			flex: 1 1 0; padding: 6px 10px; cursor: pointer;
+			background: transparent; color: var(--fg-muted);
+			border: 1px solid var(--border); border-radius: 8px;
+			font-size: 12px; font-weight: 600;
+		}
+		.skills-tab:hover { background: var(--bg-glass); color: var(--fg); }
+		.skills-tab.active {
+			background: var(--bg-glass-hi); color: var(--fg-strong);
+			border-color: var(--border-strong);
+		}
+		.skill-row .row-actions {
+			display: flex; gap: 6px; margin-top: 4px;
+		}
+		.skill-row .row-action {
+			padding: 2px 8px; font-size: 11px; border-radius: 6px;
+			border: 1px solid var(--border); background: var(--bg-glass);
+			color: var(--fg-muted); cursor: pointer;
+		}
+		.skill-row .row-action:hover { background: var(--bg-glass-hi); color: var(--fg-strong); }
+		.row-stars { color: #f5b342; font-size: 11px; margin-left: 6px; }
 
 		/* ── Welcome empty state ─────────────────────────────────────── */
 		.welcome {
@@ -1794,12 +1986,23 @@ export class ChatPanel {
 				<button id="history-newchat">+ New chat</button>
 			</div>
 		</div>
-		<div class="dropdown-panel" id="panel-skills" role="menu" aria-label="SOPs">
-			<div class="dropdown-head">
+		<div class="dropdown-panel" id="panel-skills" role="menu" aria-label="SOPs" style="width:380px;">
+			<div class="dropdown-head" style="flex-direction:column;align-items:stretch;gap:6px;">
+				<div class="skills-tabs" id="skills-tabs">
+					<button class="skills-tab active" data-skills-tab="local">本地</button>
+					<button class="skills-tab" data-skills-tab="market">市场</button>
+				</div>
 				<input id="skills-search" type="text" placeholder="Search SOPs…" />
 			</div>
 			<div class="dropdown-body" id="skills-list">
 				<div class="dropdown-empty">Loading…</div>
+			</div>
+			<div class="dropdown-body" id="market-list" style="display:none;">
+				<div class="dropdown-empty">输入关键词回车搜索市场 SOP</div>
+			</div>
+			<div class="dropdown-foot" id="skills-foot" style="justify-content:space-between;">
+				<span class="row-meta" id="sophub-key-status" style="font-size:11px;">Sophub 未连接</span>
+				<button id="sophub-clear-key" class="secondary" title="清除本地保存的 Sophub API Key">重置 Key</button>
 			</div>
 		</div>
 		<div class="dropdown-panel" id="panel-settings" role="menu" aria-label="Settings">
@@ -1945,6 +2148,8 @@ export class ChatPanel {
 			</div>
 			<div class="sop-modal-body" id="sop-modal-body"></div>
 			<div class="sop-modal-foot">
+				<button id="sop-modal-download" class="primary" style="display:none;">下载到本地</button>
+				<button id="sop-modal-upload" style="display:none;">上传到市场</button>
 				<button id="sop-modal-use" class="primary">使用</button>
 				<button id="sop-modal-edit">编辑</button>
 				<button id="sop-modal-cancel">关闭</button>
@@ -2095,14 +2300,26 @@ export class ChatPanel {
 			// up from window.__GA_VSCODE__ to avoid double-acquisition.
 			window.__GA_VSCODE__ = _vscode;
 			const _pending = new Map(); // requestId → { resolve, reject }
+			const _sophubPending = new Map();
 			window.addEventListener('message', function (ev) {
 				const m = ev.data;
-				if (!m || m.kind !== 'apiResult') { return; }
-				const p = _pending.get(m.requestId);
-				if (!p) { return; }
-				_pending.delete(m.requestId);
-				if (m.error) { p.reject(new Error(m.error)); }
-				else { p.resolve(m.data); }
+				if (!m) { return; }
+				if (m.kind === 'apiResult') {
+					const p = _pending.get(m.requestId);
+					if (!p) { return; }
+					_pending.delete(m.requestId);
+					if (m.error) { p.reject(new Error(m.error)); }
+					else { p.resolve(m.data); }
+					return;
+				}
+				if (m.kind === 'sophubResult') {
+					const p = _sophubPending.get(m.requestId);
+					if (!p) { return; }
+					_sophubPending.delete(m.requestId);
+					if (m.error) { p.reject(new Error(m.error)); }
+					else { p.resolve(m.data); }
+					return;
+				}
 			});
 			let _seq = 0;
 			function _call(method, url, body) {
@@ -2134,6 +2351,19 @@ export class ChatPanel {
 				saveLLMConfig: function (data) { return _post('/api/llm-config', data); },
 				reloadLLMConfig: function () { return _post('/api/llm-config/reload', {}); },
 				listModels: function (apikey, apibase, proxy) { return _post('/api/llm-config/list-models', { apikey: apikey, apibase: apibase, proxy: proxy }); },
+				sophub: function (op, payload) {
+					return new Promise(function (resolve, reject) {
+						const requestId = 's' + (++_seq) + '_' + Date.now();
+						_sophubPending.set(requestId, { resolve: resolve, reject: reject });
+						_vscode.postMessage({ kind: 'sophub', requestId: requestId, op: op, payload: payload || {} });
+						setTimeout(function () {
+							if (_sophubPending.has(requestId)) {
+								_sophubPending.delete(requestId);
+								reject(new Error('Sophub timeout: ' + op));
+							}
+						}, 30000);
+					});
+				},
 			};
 		})();
 
@@ -3547,6 +3777,12 @@ export class ChatPanel {
 			const sopModalUseEl = document.getElementById('sop-modal-use');
 			const sopModalEditEl = document.getElementById('sop-modal-edit');
 			const sopModalCancelEl = document.getElementById('sop-modal-cancel');
+			const sopModalDownloadEl = document.getElementById('sop-modal-download');
+			const sopModalUploadEl = document.getElementById('sop-modal-upload');
+			const skillsTabsEl = document.getElementById('skills-tabs');
+			const marketListEl = document.getElementById('market-list');
+			const sophubKeyStatusEl = document.getElementById('sophub-key-status');
+			const sophubClearKeyEl = document.getElementById('sophub-clear-key');
 			const welcomeEl = document.getElementById('welcome');
 			const modeTriggerEl = document.getElementById('mode-trigger');
 			const modeLabelEl = document.getElementById('mode-label');
@@ -3559,6 +3795,10 @@ export class ChatPanel {
 			let allSkills = { tools: [], sops: [] };
 			let skillsLoaded = false;
 			let activeSop = null;
+			let activeSopMode = 'local'; // 'local' | 'market'
+			let currentSkillTab = 'local';
+			let marketResults = [];
+			let marketSearchSeq = 0;
 			let settingsLoaded = false;
 
 			// ── Welcome state visibility ──────────────────────────────────
@@ -3864,6 +4104,24 @@ export class ChatPanel {
 				_historySearchTimer = setTimeout(function () { loadSessions(q); }, 200);
 			});
 
+			function setSkillsTab(tab) {
+				currentSkillTab = (tab === 'market') ? 'market' : 'local';
+				Array.from(skillsTabsEl.querySelectorAll('.skills-tab')).forEach(function (b) {
+					b.classList.toggle('active', b.getAttribute('data-skills-tab') === currentSkillTab);
+				});
+				skillsListEl.style.display = (currentSkillTab === 'local') ? '' : 'none';
+				marketListEl.style.display = (currentSkillTab === 'market') ? '' : 'none';
+				skillsSearchEl.placeholder = (currentSkillTab === 'market') ? '搜索市场 SOP（回车）…' : 'Search SOPs…';
+			}
+			skillsTabsEl.addEventListener('click', function (e) {
+				const t = e.target && e.target.closest('[data-skills-tab]');
+				if (!t) { return; }
+				setSkillsTab(t.getAttribute('data-skills-tab'));
+				if (currentSkillTab === 'market' && marketResults.length === 0) {
+					searchMarket('');
+				}
+			});
+
 			function renderSkills(filter) {
 				const f = (filter || '').trim().toLowerCase();
 				const sops = (allSkills.sops || []).filter(function (it) {
@@ -3876,39 +4134,150 @@ export class ChatPanel {
 					return;
 				}
 				skillsListEl.innerHTML = '';
-				const renderGroup = function (label, items) {
-					if (!items.length) { return; }
-					const h = document.createElement('div');
-					h.className = 'dropdown-section';
-					h.textContent = label + ' (' + items.length + ')';
-					skillsListEl.appendChild(h);
-					items.forEach(function (it) {
-						const row = document.createElement('div');
-						row.className = 'dropdown-row skill-row';
-						const t = document.createElement('div');
-						t.className = 'row-title';
-						t.textContent = it.title || it.name || '(unnamed)';
-						row.appendChild(t);
-						const brief = it.brief || it.desc || it.summary;
-						if (brief) {
-							const d = document.createElement('div');
-							d.className = 'row-brief';
-							d.textContent = String(brief).slice(0, 120);
-							row.appendChild(d);
-						}
-						row.addEventListener('click', async function (e) {
-							if (e.altKey || e.shiftKey) {
-								insertAtCursor(inputEl, '@sop:' + (it.name || ''));
-								closeAllPanels();
-								return;
-							}
-							openSopModal(it);
-							closeAllPanels();
-						});
-						skillsListEl.appendChild(row);
+				const h = document.createElement('div');
+				h.className = 'dropdown-section';
+				h.textContent = 'SOPs (' + sops.length + ')';
+				skillsListEl.appendChild(h);
+				sops.forEach(function (it) {
+					const row = document.createElement('div');
+					row.className = 'dropdown-row skill-row';
+					const t = document.createElement('div');
+					t.className = 'row-title';
+					t.textContent = it.title || it.name || '(unnamed)';
+					row.appendChild(t);
+					const brief = it.brief || it.desc || it.summary;
+					if (brief) {
+						const d = document.createElement('div');
+						d.className = 'row-brief';
+						d.textContent = String(brief).slice(0, 120);
+						row.appendChild(d);
+					}
+					const acts = document.createElement('div');
+					acts.className = 'row-actions';
+					const upBtn = document.createElement('button');
+					upBtn.className = 'row-action';
+					upBtn.textContent = '↑ 上传到市场';
+					upBtn.addEventListener('click', function (ev) {
+						ev.stopPropagation();
+						uploadLocalSop(it);
 					});
-				};
-				renderGroup('SOPs', sops);
+					acts.appendChild(upBtn);
+					row.appendChild(acts);
+					row.addEventListener('click', function (e) {
+						if (e.altKey || e.shiftKey) {
+							insertAtCursor(inputEl, '@sop:' + (it.name || ''));
+							closeAllPanels();
+							return;
+						}
+						openSopModal(it, 'local');
+						closeAllPanels();
+					});
+					skillsListEl.appendChild(row);
+				});
+			}
+
+			function renderMarketList() {
+				if (!marketResults.length) {
+					marketListEl.innerHTML = '<div class="dropdown-empty">无结果</div>';
+					return;
+				}
+				marketListEl.innerHTML = '';
+				const h = document.createElement('div');
+				h.className = 'dropdown-section';
+				h.textContent = '市场 SOP (' + marketResults.length + ')';
+				marketListEl.appendChild(h);
+				marketResults.forEach(function (it) {
+					const row = document.createElement('div');
+					row.className = 'dropdown-row skill-row';
+					const t = document.createElement('div');
+					t.className = 'row-title';
+					t.textContent = it.title || ('SOP #' + it.id);
+					if (typeof it.avg_stars === 'number' && it.avg_stars > 0) {
+						const s = document.createElement('span');
+						s.className = 'row-stars';
+						s.textContent = '★ ' + it.avg_stars.toFixed(1);
+						t.appendChild(s);
+					}
+					row.appendChild(t);
+					const meta = it.author_name || it.author || it.summary || it.preview;
+					if (meta) {
+						const d = document.createElement('div');
+						d.className = 'row-brief';
+						d.textContent = String(meta).slice(0, 140);
+						row.appendChild(d);
+					}
+					const acts = document.createElement('div');
+					acts.className = 'row-actions';
+					const dl = document.createElement('button');
+					dl.className = 'row-action';
+					dl.textContent = '↓ 下载';
+					dl.addEventListener('click', function (ev) {
+						ev.stopPropagation();
+						downloadMarketSop(it);
+					});
+					acts.appendChild(dl);
+					row.appendChild(acts);
+					row.addEventListener('click', function () {
+						openSopModal(it, 'market');
+						closeAllPanels();
+					});
+					marketListEl.appendChild(row);
+				});
+			}
+
+			async function searchMarket(q) {
+				const seq = ++marketSearchSeq;
+				marketListEl.innerHTML = '<div class="dropdown-empty">搜索中…</div>';
+				try {
+					const r = await window.gaApi.sophub('search', { q: q || '', page: 1, page_size: 24 });
+					if (seq !== marketSearchSeq) { return; }
+					marketResults = (r && r.items) || [];
+					renderMarketList();
+					refreshSophubKeyStatus(true);
+				} catch (e) {
+					if (seq !== marketSearchSeq) { return; }
+					marketListEl.innerHTML = '<div class="dropdown-empty">市场搜索失败：' + escapeHtml(e.message || String(e)) + '</div>';
+				}
+			}
+
+			async function uploadLocalSop(it) {
+				if (!confirm('上传 "' + (it.title || it.name) + '" 到 Sophub 市场？\\n请确认内容不含密钥/隐私/违法信息。')) { return; }
+				try {
+					const r = await window.gaApi.sophub('upload', { sopName: it.name, title: it.title || it.name });
+					alert('上传成功：' + (r && (r.title || r.id) || ''));
+					refreshSophubKeyStatus(true);
+				} catch (e) {
+					alert('上传失败：' + (e.message || e));
+				}
+			}
+
+			async function downloadMarketSop(it, overwrite) {
+				try {
+					const r = await window.gaApi.sophub('download', {
+						id: it.id,
+						filename: it.title || ('sop-' + it.id),
+						overwrite: !!overwrite,
+					});
+					if (r && r.exists) {
+						if (confirm('已存在 ' + r.target + '\\n是否覆盖？')) {
+							return downloadMarketSop(it, true);
+						}
+						return;
+					}
+					alert('已下载到：' + (r && r.target));
+					if (typeof loadSkills === 'function') { loadSkills(); }
+				} catch (e) {
+					alert('下载失败：' + (e.message || e));
+				}
+			}
+
+			function setModalMode(mode) {
+				activeSopMode = mode;
+				const isLocal = (mode === 'local');
+				sopModalUseEl.style.display = isLocal ? '' : 'none';
+				sopModalEditEl.style.display = isLocal ? '' : 'none';
+				sopModalUploadEl.style.display = isLocal ? '' : 'none';
+				sopModalDownloadEl.style.display = isLocal ? 'none' : '';
 			}
 
 			function closeSopModal() {
@@ -3916,14 +4285,21 @@ export class ChatPanel {
 				sopModalEl.classList.remove('show');
 			}
 
-			async function openSopModal(it) {
+			async function openSopModal(it, mode) {
 				activeSop = it;
+				setModalMode(mode || 'local');
 				sopModalTitleEl.textContent = it.title || it.name || 'SOP';
 				sopModalBodyEl.innerHTML = '<div class="dropdown-empty">Loading SOP…</div>';
 				sopModalEl.classList.add('show');
 				try {
-					const sop = await window.gaApi.getSop(it.name || '');
-					const content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : '';
+					let content = '';
+					if (activeSopMode === 'local') {
+						const sop = await window.gaApi.getSop(it.name || '');
+						content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : '';
+					} else {
+						const sop = await window.gaApi.sophub('get', { id: it.id });
+						content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : '';
+					}
 					sopModalBodyEl.innerHTML = '<div class="md">' + renderMarkdown(content || '(empty)', { codeActions: false }) + '</div>';
 				} catch (err) {
 					sopModalBodyEl.innerHTML = '<div class="dropdown-empty">Failed to load SOP: ' + escapeHtml(err.message || String(err)) + '</div>';
@@ -3936,15 +4312,44 @@ export class ChatPanel {
 				if (e.target === sopModalEl) { closeSopModal(); }
 			});
 			sopModalUseEl.addEventListener('click', function () {
-				if (!activeSop) { return; }
+				if (!activeSop || activeSopMode !== 'local') { return; }
 				insertAtCursor(inputEl, '@sop:' + (activeSop.name || ''));
 				closeSopModal();
 				inputEl.focus();
 			});
 			sopModalEditEl.addEventListener('click', function () {
-				if (!activeSop) { return; }
+				if (!activeSop || activeSopMode !== 'local') { return; }
 				vscode.postMessage({ kind: 'open_sop_source', sopName: activeSop.name || '' });
 			});
+			sopModalUploadEl.addEventListener('click', function () {
+				if (!activeSop || activeSopMode !== 'local') { return; }
+				uploadLocalSop(activeSop);
+			});
+			sopModalDownloadEl.addEventListener('click', function () {
+				if (!activeSop || activeSopMode !== 'market') { return; }
+				downloadMarketSop(activeSop);
+			});
+
+			async function refreshSophubKeyStatus(connected) {
+				if (!sophubKeyStatusEl) { return; }
+				if (connected) {
+					sophubKeyStatusEl.textContent = 'Sophub 已连接';
+					return;
+				}
+				try {
+					const r = await window.gaApi.sophub('keyStatus', {});
+					sophubKeyStatusEl.textContent = (r && r.hasKey) ? 'Sophub 已连接' : 'Sophub 未连接（首次搜索时自动注册）';
+				} catch { /* ignore */ }
+			}
+			if (sophubClearKeyEl) {
+				sophubClearKeyEl.addEventListener('click', async function () {
+					try {
+						await window.gaApi.sophub('clearKey', {});
+						alert('已清除 Sophub Key');
+						refreshSophubKeyStatus(false);
+					} catch (e) { alert('清除失败：' + (e.message || e)); }
+				});
+			}
 
 			async function loadSkills() {
 				try {
@@ -3955,11 +4360,20 @@ export class ChatPanel {
 					};
 					renderSkills('');
 					skillsLoaded = true;
+					refreshSophubKeyStatus(false);
 				} catch (e) {
 					skillsListEl.innerHTML = '<div class="dropdown-empty">Failed: ' + escapeHtml(e.message || String(e)) + '</div>';
 				}
 			}
-			skillsSearchEl.addEventListener('input', function () { renderSkills(skillsSearchEl.value); });
+			skillsSearchEl.addEventListener('input', function () {
+				if (currentSkillTab === 'local') { renderSkills(skillsSearchEl.value); }
+			});
+			skillsSearchEl.addEventListener('keydown', function (e) {
+				if (e.key === 'Enter' && currentSkillTab === 'market') {
+					e.preventDefault();
+					searchMarket(skillsSearchEl.value);
+				}
+			});
 
 			function insertAtCursor(el, text) {
 				const start = el.selectionStart || 0;
