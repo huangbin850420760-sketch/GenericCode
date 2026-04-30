@@ -2349,8 +2349,9 @@ export class ChatPanel {
 			}
 			function escapeAttr(s) { return escapeHtml(s); }
 
-			function renderMarkdown(src) {
+			function renderMarkdown(src, opts) {
 				if (!src) { return ''; }
+				opts = opts || {};
 				// 1) Extract fenced code blocks FIRST so their contents skip
 				//    all other transforms.  Stash with placeholders.
 				const stash = [];
@@ -2391,18 +2392,20 @@ export class ChatPanel {
 						// We skip purely descriptive fences (text/plaintext/output)
 						// to reduce footgun risk.
 						const APPLY_SKIP = ['text', 'txt', 'plaintext', 'output', 'stdout', 'stderr', ''];
-						const showApply = APPLY_SKIP.indexOf(safeLang) < 0 || !!safeFile;
+						const showActions = opts.codeActions !== false;
+						const showApply = showActions && (APPLY_SKIP.indexOf(safeLang) < 0 || !!safeFile);
 						const applyBtn = showApply
 							? '<button class="apply" data-apply' +
 								(safeFile ? ' data-file="' + escapeAttr(safeFile) + '"' : '') +
 								(safeLang ? ' data-lang="' + escapeAttr(safeLang) + '"' : '') +
 							'>Apply</button>'
 							: '';
+						const copyBtn = showActions ? '<button class="copy" data-copy>Copy</button>' : '';
 						return take(
 							'<pre><div class="codeblock-header">' +
 								'<span class="lang">' + langLabel + fileLabel + '</span>' +
 								applyBtn +
-								'<button class="copy" data-copy>Copy</button>' +
+								copyBtn +
 							'</div><code>' + escaped + '</code></pre>'
 						);
 					});
@@ -3921,7 +3924,7 @@ export class ChatPanel {
 				try {
 					const sop = await window.gaApi.getSop(it.name || '');
 					const content = sop && (sop.content || sop.text || sop.markdown) ? (sop.content || sop.text || sop.markdown) : '';
-					sopModalBodyEl.innerHTML = '<div class="md">' + renderMarkdown(content || '(empty)') + '</div>';
+					sopModalBodyEl.innerHTML = '<div class="md">' + renderMarkdown(content || '(empty)', { codeActions: false }) + '</div>';
 				} catch (err) {
 					sopModalBodyEl.innerHTML = '<div class="dropdown-empty">Failed to load SOP: ' + escapeHtml(err.message || String(err)) + '</div>';
 				}
